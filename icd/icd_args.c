@@ -22,7 +22,7 @@ static struct option const long_options[] =
  *  @brief      Print usage information.
  *
  *  @param      program_name name of the executable
- *  @param      status 	exit with status
+ *  @param      status exit with status
  */
 static void
 icd_args_usage(const char *program_name, int status)

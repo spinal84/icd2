@@ -4,6 +4,7 @@ icd2_CFLAGS = -I../support $(ICD_CFLAGS) -Wall -Werror
 icd2_LDADD = $(ICD_LIBS) ../support/libicd_log.la
 
 icd2_SOURCES =	icd_args.c \
-		icd_context.c
+		icd_context.c \
+		icd_pid.c
 
 MAINTAINERCLEANFILES = Makefile.in

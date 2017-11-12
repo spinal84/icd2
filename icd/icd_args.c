@@ -45,6 +45,7 @@ icd_args_usage(const char *program_name, int status)
  *
  *  @param      argc Parameter given to main()
  *  @param      argv Parameter given to main()
+ *  @param      context ICd context
  *
  *  @return     Index of first non-option argument
  */

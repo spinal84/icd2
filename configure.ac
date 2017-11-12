@@ -44,5 +44,6 @@ AC_SUBST(ICD_CFLAGS)
 AC_OUTPUT([
 Makefile
 support/Makefile
+icd/Makefile
 ])
 

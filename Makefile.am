@@ -1,2 +1,2 @@
-SUBDIRS = support
+SUBDIRS = support icd
 

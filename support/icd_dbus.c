@@ -32,7 +32,7 @@ icd_dbus_close()
   dbus_shutdown();
 }
 
-DBusConnection *
+static DBusConnection *
 icd_dbus_get_system_bus(void)
 {
   DBusError error;
@@ -368,4 +368,34 @@ icd_dbus_get_unique_name(const gchar *name, icd_dbus_get_unique_name_cb_fn cb,
     dbus_message_unref(message);
 
   return FALSE;
+}
+
+void
+icd_dbus_cancel_unique_name(DBusPendingCall *pending)
+{
+  GSList **unique_list = icd_dbus_get_unique_name_list();
+  GSList *l;
+
+
+  for (l = *unique_list; l; l = l->next)
+  {
+    struct icd_dbus_unique_name_data *unique = l->data;
+
+    if (pending && unique->pending != pending)
+      continue;
+
+    if (unique->pending)
+      dbus_pending_call_cancel(unique->pending);
+
+    if (unique->cb)
+      unique->cb(unique->name, NULL, unique->user_data);
+
+    g_free(unique->name);
+    g_free(unique);
+
+    *unique_list = g_slist_delete_link(*unique_list, l);
+
+    if (pending)
+      return;
+  }
 }

@@ -17,7 +17,7 @@ libicd_settings_la_SOURCES = \
 			icd_backend_gconf.c
 
 libicd_dbus_la_CFLAGS = $(SUPPORT_CFLAGS)
-libicd_dbus_la_LDFLAGS = $(SUPPORT_LDFLAGS) -version-info 1:1:0
+libicd_dbus_la_LDFLAGS = $(SUPPORT_LDFLAGS) -version-info 2:0:1
 libicd_dbus_la_LIBADD = $(ICD_LIBS) libicd_log.la
 libicd_dbus_la_SOURCES = icd_dbus.c
 

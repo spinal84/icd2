@@ -74,7 +74,11 @@ icd_backend_gconf_init(struct icd_settings *settings)
       gchar *network_type;
       gchar *key;
 
-#pragma message "Check why this is needed"
+#pragma message "****************************************************"
+#pragma message "\n"
+#pragma message "!!!!!!!!!     Check why this is needed      !!!!!!!!"
+#pragma message "\n"
+#pragma message "****************************************************"
       g_strrstr((const gchar *)l->data, "/");
       handle->set = "/system/osso/connectivity/IAP";
 

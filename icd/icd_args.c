@@ -18,6 +18,12 @@ static struct option const long_options[] =
   {NULL, 0, NULL, 0}
 };
 
+/**
+ *  @brief      Print usage information.
+ *
+ *  @param      program_name name of the executable
+ *  @param      status 	exit with status
+ */
 static void
 icd_args_usage(const char *program_name, int status)
 {
@@ -34,6 +40,14 @@ icd_args_usage(const char *program_name, int status)
   exit(status);
 }
 
+/**
+ *  @brief      Process commandline options.
+ *
+ *  @param      argc Parameter given to main()
+ *  @param      argv Parameter given to main()
+ *
+ *  @return     Index of first non-option argument
+ */
 gint
 icd_args_decode(int argc, char *argv[], struct icd_context *context)
 {

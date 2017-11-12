@@ -1,10 +1,9 @@
-AC_INIT([connui], [2.88])
+AC_INIT([Internet Connectivity daemon 2], [0.87+fremantle10+0m5], [], icd2)
 AC_CANONICAL_SYSTEM
+AC_CONFIG_MACRO_DIR([m4])
 
 AM_CONFIG_HEADER(config.h)
-
 AM_MAINTAINER_MODE
-
 AM_INIT_AUTOMAKE
 
 AC_PROG_CC

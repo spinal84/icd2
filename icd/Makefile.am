@@ -7,6 +7,7 @@ icd2_SOURCES =	icd_args.c \
 		icd_context.c \
 		icd_pid.c \
 		icd_signal.c \
-		icd_plugin.c
+		icd_plugin.c \
+		icd_exec.c
 
 MAINTAINERCLEANFILES = Makefile.in

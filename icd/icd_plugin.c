@@ -130,7 +130,7 @@ icd_plugin_load_list(const char *plugindir, GSList *plugin_list,
 
 /**
  * @brief Load all plugins in specified directory. Enumerates all files in the
- * directory and tries to load all shared objects in the there.
+ * directory and tries to load all shared objects in there.
  *
  * @param plugindir path for the plugins
  * @param prefix prefix for the plugins to load

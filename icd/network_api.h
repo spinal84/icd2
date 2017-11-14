@@ -1,0 +1,736 @@
+#ifndef NETWORK_API_H
+#define NETWORK_API_H
+
+/*
+ This file is part of icd2-dev, ICd2 development header files.
+
+ Copyright (C) 2007-2008 Nokia Corporation. All rights reserved.
+
+ Contact: Patrik Flykt <patrik.flykt@nokia.com>
+
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+
+  * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+  * Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+  * Neither the name of Nokia Corporation nor the names of its contributors
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+*/
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <sys/types.h>
+#include <unistd.h>
+#include <glib.h>
+
+
+/**
+@file network_api.h
+
+@addtogroup network_module_api Network module API
+
+The network module API is considered stable.
+
+A network in ICd is abstracted by a shared library implementing the
+network module API. A network module consists of three functionally
+different parts, one for searching for networks of the supported types,
+another for connecting and disconnecting and the third one for providing
+information about the connected network.
+<p>
+Each module must implement the  @ref icd_nw_init_fn() function, and the
+network module library package must create special settings in GConf in
+order to be loaded by ICd2. The settings define a unique network type
+string that will be used to look up modules needed when connecting
+networks with a particular type.
+
+A network type is defined by the following entries in the gconf path
+<code>/system/osso/connectivity/network_type/</code><i>&lt;network type
+name&gt;</i>
+<ul>
+<li><code>network_modules</code> A list of strings where each string
+contains the name of a shared network module library to load. The modules
+are run in the order specified when connecting.
+<li><code>idle_timeout</code> Optional network idle timeout in seconds for
+this network type.
+</ul>
+
+The module initialization function is fed an @ref icd_nw_api structure,
+which the module needs to fill in with the functions it intends to
+support. A network module consists of three layers:
+<ul>
+<li> link layer with icd_nw_link_up_fn() and icd_nw_link_down_fn()
+functions 
+<li> post-link or link authentication layer with
+icd_nw_link_post_up_fn() and icd_nw_link_pre_down_fn() functions 
+<li> IP layer with icd_nw_ip_up_fn() and icd_nw_ip_down_fn() functions
+</ul>
+Each of the layers consist of <code>*_up_fn()</code> and
+<code>*_down_fn()</code> functions. In order to support the specified
+layer, an <code>*_up_fn()</code> function needs to be provided while a
+<code>*_down_fn()</code> function is optional. A module may choose to
+implement one or more of the network module layers.
+<p>
+When a network is being established, the specified modules will be run in the
+order defined in GConf. Thus when connecting to a network, the link
+layer functions icd_nw_link_up_fn() will be run one by one in the
+specified order for each network module, and the next module will be
+run only after the previous one has called
+icd_nw_link_up_cb_fn(). When all link layer module icd_nw_link_up_fn()
+functions have been successfully run, the post-link layer
+icd_nw_link_post_up_fn() functions will be run in the same
+order for each network module. Again ICd waits for the
+icd_nw_link_post_up_cb_fn() to be called before continuing. When all
+modules with a icd_nw_link_post_up_fn() have been called, the
+procedure is repeated for the IP layer. If an error condition or other
+unfavorable network event happens while the module tries to connect,
+the module will indicate this with a suitable @ref icd_nw_status code
+in the callback function. When a callback function returns an error, ICd2
+will start disconnecting the network connection, calling the <code>
+*_down_fn()</code> functions in reverse order.
+
+<p>
+When the network module has been successfully connected but notices
+that the network connection it implements has been closed, e.g. due to
+connection loss, it must use icd_nw_close_fn() to inform ICd about the
+event. A network module must use the close function if it has already called
+the given <code>*_cb_fn()</code> and not call the callback function
+more than once.
+<p>
+ICd can request disconnection of a network at any time, either due to
+a network module calling icd_nw_close_fn(), a network callback
+returning error or a disconnection forced by a timer or requested by
+the user. When a disconnection takes place, network module
+<code>*_down()</code> functions are called in reverse order than their
+<code>*_up()</code> counterparts.  A network module needs to be
+prepared that a disconnect can happen before a network module has
+called the respective <code>*_up_cb_fn()</code> callback, i.e. ICd
+will not wait for the callback to be called before starting the
+network module disconnection. When the disconnect procedure is
+completed, the network module calls the given
+<code>*_down_cb_fn()</code> function, whereby ICd continues with the
+next <code>*_down_fn()</code> function.
+<p>
+Network scanning is started with the icd_nw_start_search_fn() function.
+The start function will be called again if the search scope changes from
+#ICD_NW_SEARCH_SCOPE_SAVED to #ICD_NW_SEARCH_SCOPE_ALL. Scan results are
+passed to ICd2 with the icd_nw_search_cb_fn() callback function. When the
+network search is completed the module must call the callback with the
+#ICD_NW_SEARCH_COMPLETE status code. If a module desires, it can invalidate
+any scanned networks by setting the #ICD_NW_SEARCH_EXPIRE status code and
+filling in the network type, attributes and id for the expired network.
+Expiring a network can happen at any time, also after the network scan has
+ended. Scanning should be stopped when icd_nw_stop_search_fn() is called.
+After scan has ended or stopped, no more scan results are accepted except
+for expiring entries. ICd2 will automatically expire entries after the time
+given in the search_lifetime element of the @ref icd_nw_api structure.
+<p>
+A network module may implement optional statistics functions. When a statistics
+request is received, network status is queried from the link layer from every
+module implementing icd_nw_link_stats_fn(), then for the link post layer from
+every module implementing icd_nw_link_post_stats_fn() and finally from every
+icd_nw_ip_stats_fn() function. The values from upper layers take precedence
+over the values supplied by lower layers with the signal, station id and dB
+values being unique statistics for the link layer. The IP layer can optionally
+support IP status information by implmenting the icd_nw_ip_addr_info_fn()
+function.
+<p>
+Any network module can ask a renewal of an network layer with the
+icd_nw_renew_fn() function. Usually the renewal is due to some specialized
+network condition in some special network case; network modules have no need
+to normally call the renew function. If a renew is requested for a specific
+\ref icd_nw_layer network module layer, the corresponding renew functions
+icd_nw_api::link_renew, icd_nw_api::link_post_renew, icd_nw_api::ip_renew
+are called for each module that have the corresponding <code>*_up()</code>
+function. If the network renewal is successful and no side effects will be
+noticable by any other network module, the renew callback function shall
+return #ICD_NW_RENEW_NO_CHANGES. If there are network changes affecting
+other parts of the network stack, #ICD_NW_RENEW_CHANGES_MADE must be reported.
+A module layer without renew functions receiving a renew request will cause
+the IAP to be restarted.
+
+ * @{ */
+
+
+/** ICd2 version this network module is compiled against */
+#define ICD_NW_MODULE_VERSION  "0.87+fremantle10+0m5"
+
+#include "network_api_defines.h"
+
+
+/** Callback function called when the network module layer has been renewed
+ * @param status status of the operation
+ * @param renew_cb_token the callback token
+ */
+typedef void (*icd_nw_layer_renew_cb_fn) (enum icd_nw_renew_status status,
+					  gpointer renew_cb_token);
+/** Function for renewing a network module layer
+ * @param network_type network type
+ * @param network_attrs network attributes
+ * @param network_id netowork id
+ * @param renew_cb callback function for notifying ICd when the renewal is done
+ * @param renew_cb_token token to pass to the callback function
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void (*icd_nw_layer_renew_fn) (const gchar *network_type,
+				       const guint network_attrs,
+				       const gchar *network_id,
+				       icd_nw_layer_renew_cb_fn renew_cb,
+				       gpointer renew_cb_token,
+				       gpointer *private);
+
+/** Callback function called when the IP address has been deconfigured
+ * @param status status of the operation
+ * @param ip_up_cb_token the callback token
+ */
+typedef void
+(*icd_nw_ip_down_cb_fn) (const enum icd_nw_status status,
+			 const gpointer ip_down_cb_token);
+/** Function for deconfiguring the IP layer, e.g. relasing the IP address.
+ * Normally this function need not to be provided as the libicd_network_ipv4
+ * network module provides IP address deconfiguration in a generic fashion.
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ * @param interface_name interface name
+ * @param ip_down_cb callback function for notifying ICd when the IP address
+ *        is deconfigured
+ * @param ip_down_cb_token token to pass to the callback function
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void
+(*icd_nw_ip_down_fn) (const gchar *network_type,
+		      const guint network_attrs,
+		      const gchar *network_id,
+		      const gchar *interface_name,
+		      icd_nw_ip_down_cb_fn ip_down_cb,
+		      gpointer ip_down_cb_token,
+		      gpointer *private);
+
+/** Callback function called when IP address configuration has completed
+ * @param status status of the operation
+ * @param err_str NULL success, error string from osso-ic-dbus.h on failure
+ * @param ip_up_cb_token the callback token
+ * @param ... zero or more arrays of strings where each string in the array
+ *        is an environment variable of the form name=value; end with NULL
+ */
+typedef void (*icd_nw_ip_up_cb_fn) (const enum icd_nw_status status,
+				    const gchar *err_str,
+				    const gpointer ip_up_cb_token,
+				    ...);
+/** Function for configuring an IP address. Normally this function need not be
+ * provided as the libicd_network_ipv4 network module takes care of configuring
+ * IP addresses in a generic fashion.
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ * @param interface_name interface name
+ * @param link_up_cb callback function for notifying ICd when the IP address
+ *        is configured
+ * @param link_up_cb_token token to pass to the callback function
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void
+(*icd_nw_ip_up_fn) (const gchar *network_type,
+		    const guint network_attrs,
+		    const gchar *network_id,
+		    const gchar *interface_name,
+		    icd_nw_ip_up_cb_fn ip_up_cb,
+		    gpointer ip_up_cb_token,
+		    gpointer *private);
+
+/** Receive IP address configuration information based on network type,
+ * attributes and id.
+ * @param addr_info_cb_token token passed to the request function
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ * @param private a reference to the icd_nw_api private member
+ * @param ip_address IP address string or NULL if no such value
+ * @param ip_netmask IP netmask string which or NULL if no such value
+ * @param ip_gateway IP gateway string which or NULL if no such value
+ * @param ip_dns1 DNS server IP address string or NULL if no such value
+ * @param ip_dns2 DNS server IP address string or NULL if no such value
+ * @param ip_dns3 DNS server IP address string or NULL if no such value
+ * @return TRUE if some of the values are returned, FALSE if no values assigned
+ */
+typedef void (*icd_nw_ip_addr_info_cb_fn) (const gpointer addr_info_cb_token,
+					   const gchar *network_type,
+					   const guint network_attrs,
+					   const gchar *network_id,
+					   gchar *ip_address,
+					   gchar *ip_netmask,
+					   gchar *ip_gateway,
+					   gchar *ip_dns1,
+					   gchar *ip_dns2,
+					   gchar *ip_dns3);
+/** Request IP address configuration information based on network type,
+ * attributes and id.
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id network id
+ * @param private a reference to the icd_nw_api private member
+ * @param cb callback function when delivering the data
+ * @param addr_info_cb_token token to pass to the callback function
+ */
+typedef void (*icd_nw_ip_addr_info_fn) (const gchar *network_type,
+					const guint network_attrs,
+					const gchar *network_id,
+					gpointer *private,
+					icd_nw_ip_addr_info_cb_fn cb,
+					const gpointer addr_info_cb_token);
+
+/** Receive ip statistics based on network type, attributes and id.
+ * Values are set to zero or NULL if statistics are not available or applicable
+ * @param ip_stats_cb_token token passed to the request function
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id network id
+ * @param time_active time active, if applicable
+ * @param rx_bytes bytes received on the link, if applicable
+ * @param tx_bytes bytes sent on the link, if applicable
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void (*icd_nw_ip_stats_cb_fn) (const gpointer ip_stats_cb_token,
+				       const gchar *network_type,
+				       const guint network_attrs,
+				       const gchar *network_id,
+				       guint time_active,
+				       guint rx_bytes,
+				       guint tx_bytes);
+
+/** Request ip statistics based on network type, attributes and id.
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id network id
+ * @param private a reference to the icd_nw_api private member
+ * @param cb callback function when delivering the data
+ * @param ip_stats_cb_token token to pass to the callback function
+ */
+typedef void (*icd_nw_ip_stats_fn) (const gchar *network_type,
+				    const guint network_attrs,
+				    const gchar *network_id,
+				    gpointer *private,
+				    icd_nw_ip_stats_cb_fn cb,
+				    const gpointer ip_stats_cb_token);
+
+/** Callback notifying the status of icd_nw_link_pre_down_fn
+ * @param status status of the operation; ignored for now
+ * @param link_pre_down_cb_token the callback token
+ */
+typedef void
+(*icd_nw_link_pre_down_cb_fn) (const enum icd_nw_status status,
+			       const gpointer link_pre_down_cb_token);
+/** Function to disconnect the link layer authentication
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ * @param interface_name interface name
+ * @param link_pre_down_cb callback function for notifying ICd when the link
+ *        is deauthenticate
+ * @param link_pre_down_cb_token token to pass to the callback function
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void
+(*icd_nw_link_pre_down_fn) (const gchar *network_type,
+			    const guint network_attrs,
+			    const gchar *network_id,
+			    const gchar *interface_name,
+			    icd_nw_link_pre_down_cb_fn link_pre_down_cb,
+			    const gpointer link_pre_down_cb_token,
+			    gpointer *private);
+
+/** Callback notifying the status of icd_nw_link_post_up_fn
+ * @param status status of the operation
+ * @param err_str NULL success, error string from osso-ic-dbus.h on failure
+ * @param link_post_up_cb_token the callback token
+ * @param ... zero or more arrays of strings where each string in the array
+ *        is an environment variable of the form name=value; end with NULL
+ */
+typedef void
+(*icd_nw_link_post_up_cb_fn) (const enum icd_nw_status status,
+			      const gchar *err_str,
+			      const gpointer link_post_up_cb_token,
+			      ...);
+/** Function for performing link layer authentication after the link has been
+ * enabled
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ * @param interface_name interface name
+ * @param link_post_up_cb callback function for notifying ICd when the link
+ *        post up function has completed
+ * @param link_post_up_cb_token token to pass to the callback function
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void
+(*icd_nw_link_post_up_fn) (const gchar *network_type,
+			   const guint network_attrs,
+			   const gchar *network_id,
+			   const gchar *interface_name,
+			   icd_nw_link_post_up_cb_fn link_post_up,
+			   const gpointer link_post_up_cb_token,
+			   gpointer *private);
+
+/** Receive link post up statistics based on network type, attributes and id.
+ * Values are set to zero or NULL if statistics are not available or applicable
+ * @param link_post_stats_cb_token token passed to the request function
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id network id
+ * @param time_active time active, if applicable
+ * @param rx_bytes bytes received on the link, if applicable
+ * @param tx_bytes bytes sent on the link, if applicable
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void
+(*icd_nw_link_post_stats_cb_fn) (const gpointer link_post_stats_cb_token,
+				 const gchar *network_type,
+				 const guint network_attrs,
+				 const gchar *network_id,
+				 guint time_active,
+				 guint rx_bytes,
+				 guint tx_bytes);
+
+/** Request link post up statistics based on network type, attributes and id.
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id network id
+ * @param private a reference to the icd_nw_api private member
+ * @param cb callback function when delivering the data
+ * @param link_post_stats_cb_token token to pass to the callback function
+ */
+typedef void
+(*icd_nw_link_post_stats_fn) (const gchar *network_type,
+			      const guint network_attrs,
+			      const gchar *network_id,
+			      gpointer *private,
+			      icd_nw_link_post_stats_cb_fn cb,
+			      const gpointer link_post_stats_cb_token);
+
+/** Callback notifying the status of icd_nw_link_down_fn
+ * @param status status of the operation; ignored for now
+ * @param link_down_cb_token the callback token
+ */
+typedef void
+(*icd_nw_link_down_cb_fn) (const enum icd_nw_status status,
+			   const gpointer link_down_cb_token);
+/** Function to disconnect the link layer
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ * @param interface_name interface name
+ * @param link_down_cb callback function for notifying ICd when the link is
+ *        down
+ * @param link_down_cb_token token to pass to the callback function
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void
+(*icd_nw_link_down_fn) (const gchar *network_type,
+			const guint network_attrs,
+			const gchar *network_id,
+			const gchar *interface_name,
+			icd_nw_link_down_cb_fn link_down_cb,
+			const gpointer link_down_cb_token,
+			gpointer *private);
+
+/** Callback notifying the status of icd_nw_link_up_fn
+ * @param status status of the operation
+ * @param err_str NULL success, error string from osso-ic-dbus.h on failure
+ * @param interface_name the device interface name on ICD_NW_SUCCESS; used for
+ *        statistics gathering and post link up authentication
+ * @param link_up_cb_token the callback token
+ * @param ... zero or more arrays of strings where each string in the array
+ *        is an environment variable of the form name=value; end with NULL
+ */
+typedef void
+(*icd_nw_link_up_cb_fn) (const enum icd_nw_status status,
+			 const gchar *err_str,
+			 const gchar *interface_name,
+			 const gpointer link_up_cb_token,
+			 ...);
+/** Function to bring up the link layer
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ * @param link_up_cb the callback function to call when the link is up
+ * @param link_up_cb_token token to pass to the callback function
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void
+(*icd_nw_link_up_fn) (const gchar *network_type,
+		      const guint network_attrs,
+		      const gchar *network_id,
+		      icd_nw_link_up_cb_fn link_up_cb,
+		      const gpointer link_up_cb_token,
+		      gpointer *private);
+
+/** Receive link statistics based on network type, attributes and id. Values
+ * are set to zero or NULL if statistics are not available or applicable
+ * @param link_stats_cb_token token passed to the request function
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id network id
+ * @param time_active time active, if applicable
+ * @param signal signal level
+ * @param station_id base station id, e.g. WLAN access point MAC address
+ * @param dB raw signal strength; depends on the type of network
+ * @param rx_bytes bytes received on the link, if applicable
+ * @param tx_bytes bytes sent on the link, if applicable
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void (*icd_nw_link_stats_cb_fn) (const gpointer link_stats_cb_token,
+					 const gchar *network_type,
+					 const guint network_attrs,
+					 const gchar *network_id,
+					 guint time_active,
+					 gint signal,
+					 gchar *station_id,
+					 gint dB,
+					 guint rx_bytes,
+					 guint tx_bytes);
+
+/** Request link statistics based on network type, attributes and id.
+ * @param network_type network type
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id network id
+ * @param private a reference to the icd_nw_api private member
+ * @param cb callback function when delivering the data
+ * @param link_stats_cb_token token to pass to the callback function
+ */
+typedef void (*icd_nw_link_stats_fn) (const gchar *network_type,
+				      const guint network_attrs,
+				      const gchar *network_id,
+				      gpointer *private,
+				      icd_nw_link_stats_cb_fn cb,
+				      const gpointer link_stats_cb_token);
+
+/** Callback for the search function.
+ * @param status the status of the operation
+ * @param network_name the name of the IAP to display by the UI
+ * @param network_type the type of the IAP returned
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ * @param signal signal level
+ * @param station_id base station id, e.g. WLAN access point MAC address
+ * @param dB raw signal strength; depends on the type of network
+ * @param search_cb_token the token given in icd_nw_search_fn
+ */
+typedef void
+(*icd_nw_search_cb_fn) (enum icd_network_search_status status,
+			gchar *network_name,
+			gchar *network_type,
+			const guint network_attrs,
+			gchar *network_id,
+			enum icd_nw_levels signal,
+			gchar *station_id,
+			gint dB,
+			const gpointer search_cb_token);
+/** Function for listing the available networks provided by the module
+ * @param network_type network type to search for or NULL for all networks;
+ *        currently this will always be NULL. If you happen to report all
+ *        networks with this entry being non-NULL, don't worry. ICd2 will take
+ *        care of that too.
+ * @param search_scope search scope, see #ICD_NW_SEARCH_SCOPE_ALL and
+ *        #ICD_NW_SEARCH_SCOPE_SAVED
+ * @param search_cb the search callback
+ * @param search_cb_token token from the ICd to pass to the callback
+ * @private a reference to the icd_nw_api private member
+ */
+typedef void
+(*icd_nw_start_search_fn) (const gchar *network_type,
+			   guint search_scope,
+			   icd_nw_search_cb_fn search_cb,
+			   const gpointer search_cb_token,
+			   gpointer *private);
+/** Function for stopping an ongoing search. The module must call the callback
+ * given in #icd_nw_start_search_fn with status #ICD_NW_SEARCH_COMPLETE as soon
+ * as search is stopped.
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void
+(*icd_nw_stop_search_fn) (gpointer *private);
+
+/** Notification function for child process termination
+ * @param pid the process id that exited
+ * @param exit_value process exit value
+ * @param private a reference to the icd_nw_api private member
+ */
+typedef void
+(*icd_nw_child_exit_fn) (const pid_t pid,
+			 const gint exit_value,
+			 gpointer *private);
+
+
+/** Destruction function that cleans up after the module. The list of network
+ * types in the icd_nw_api structure is deleted by ICd. The destruction
+ * function will not be called before all child processes have exited.
+ * @param private reference to the 'private' member in the icd_nw_api
+ *        structure  */
+typedef void
+(*icd_nw_network_destruct_fn) (gpointer *private);
+
+/**
+ * The icd_nw_api defines the network connection functions implementable
+ * by the modules.
+ *
+ * When connecting to the network ICd will call the '_up' functions one after
+ * another beginning from the bottom and moving upwards to the next non-NULL
+ * ones as long as the status of the callback is ICD_NW_SUCCESS. If any error
+ * or ICD_NW_RESTART is signalled through the callback, disconnection will
+ * start. With ICD_NW_RESTART the same connection will be retried after
+ * disconnection.
+ *
+ * When disconnecting, the non-NULL '_down' functions will be called in the
+ * opposite order from top to bottom.
+ */
+struct icd_nw_api {
+  /** ICd2 version this module is compiled against, set to
+   * #ICD_NW_MODULE_VERSION */
+  gchar *version;
+
+  /** private data usable by the module */
+  gpointer private;
+
+  /** ip layer address acquisition; normally this is not provided by the
+   * module */
+  icd_nw_ip_down_fn ip_down;
+  /** ip layer address acquisition; normally this is not provided by the
+   * module */
+  icd_nw_ip_up_fn ip_up;
+  /** ip address info */
+  icd_nw_ip_addr_info_fn ip_addr_info;
+  /** ip statistics */
+  icd_nw_ip_stats_fn ip_stats;
+
+  /** link layer deauthentication, if needed */
+  icd_nw_link_pre_down_fn link_pre_down;
+  /** link layer authentication, if needed */
+  icd_nw_link_post_up_fn link_post_up;
+  /** link layer authentication statistics */
+  icd_nw_link_post_stats_fn link_post_stats;
+
+  /** bring down the link layer */
+  icd_nw_link_down_fn link_down;
+  /** bring up the link layer */
+  icd_nw_link_up_fn link_up;
+  /** link layer statistics */
+  icd_nw_link_stats_fn link_stats;
+
+  /** Cache lifetime in seconds for a network */
+  guint search_lifetime;
+  /** Seconds to wait until a new scan is done; must be smaller than
+   * search_lifetime */
+  guint search_interval;
+  /** search for IAPs */
+  icd_nw_start_search_fn start_search;
+  /** stop (ongoing) search */
+  icd_nw_stop_search_fn stop_search;
+
+  /** child process exit */
+  icd_nw_child_exit_fn child_exit;
+
+  /** function to clean up after this module; no calls to any functions will
+   * be made after this */
+  icd_nw_network_destruct_fn network_destruct;
+
+  /** ip layer address renewal, if needed */
+  icd_nw_layer_renew_fn ip_renew;
+  /** link layer authentication renewal, if needed */
+  icd_nw_layer_renew_fn link_post_renew;
+  /** link layer renewal, if needed */
+  icd_nw_layer_renew_fn link_renew;
+};
+
+
+/** Prototype function for notifying ICd that a child process has been started.
+ * The network destruction function will not be called before all child
+ * processes have exited.
+ * @param pid process id
+ * @param watch_cb_token the watch callback token given on initialization
+ */
+typedef void (*icd_nw_watch_pid_fn) (const pid_t pid,
+				     gpointer watch_cb_token);
+
+/** Prototype for the module to request closing of its connection due to
+ * internal or external events. icd_nw_api '_down' functions will be called
+ * in order starting from top.
+ * @param status reason for closing; #ICD_NW_RESTART if the IAP needs to be
+ *        restarted, success or error will both close the network connection
+ * @param err_str NULL success, error string from osso-ic-dbus.h on failure
+ * @param network_type the type of the IAP returned
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ */
+typedef void (*icd_nw_close_fn) (enum icd_nw_status status,
+				 const gchar *err_str,
+				 const gchar *network_type,
+				 const guint network_attrs,
+				 const gchar *network_id);
+
+/** Status of the network has changed while the network has been connected
+ * @param network_type the type of the IAP returned
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ */
+typedef void (*icd_nw_status_change_fn) (gchar *network_type,
+					 guint network_attrs,
+					 gchar *network_id);
+
+/** Request a renewal for a specific network module layer.
+ * @param renew_layer the network module layer to renew
+ * @param network_type network type
+ * @param network_attrs network_attrs
+ * @param network_id network_id
+ */
+typedef void (*icd_nw_renew_fn) (enum icd_nw_layer renew_layer,
+				 const gchar *network_type,
+				 const guint network_attrs,
+				 const gchar *network_id);
+
+/** Prototype for the network api initialization function. ICd searches each
+ * library for an instance of this function prototype called
+ * 'icd_nw_init'
+ * @param network_api icd_nw_api structure to be filled in by the module
+ * @param watch_cb function to inform ICd that a child process is to be
+ *        monitored for exit status
+ * @param watch_cb_token token to pass to the watch pid function
+ * @param close_cb function to inform ICd that the network connection is to be
+ *        closed
+ * @param status_change function to inform ICd2 that the status of the network
+ *        has changed while the network has been connected
+ * @param renew function to request a network layer renewal
+ * @return TRUE on success; FALSE on failure whereby the module is unloaded
+ */
+typedef gboolean
+(*icd_nw_init_fn) (struct icd_nw_api *network_api,
+		   icd_nw_watch_pid_fn watch_fn,
+		   gpointer watch_fn_token,
+		   icd_nw_close_fn close_fn,
+		   icd_nw_status_change_fn status_change_fn,
+		   icd_nw_renew_fn renew_fn);
+
+/** @} */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

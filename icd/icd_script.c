@@ -87,7 +87,7 @@ icd_script_timeout(gpointer data)
   g_free(data);
   ILOG_INFO("script exceeded time to live value, killed");
 
-  kill(pid, 9);
+  kill(pid, SIGKILL);
   return FALSE;
 }
 
@@ -231,4 +231,28 @@ icd_script_post_down(const gchar *iface, const gchar *iap_id,
 {
   return icd_script_run("stop", iface, "post-down", "post-down", iap_id,
                         iap_type, FALSE, env, cb, user_data);
+}
+
+void
+icd_script_cancel(const pid_t pid)
+{
+  GSList **scripts = icd_script_get();
+  GSList *script;
+
+  for (script = *scripts; script; script = script->next)
+  {
+    struct icd_script_data *script_data =
+        (struct icd_script_data *)script->data;
+
+    if (script->data && script_data->pid == pid)
+    {
+      ILOG_INFO("script pid %d timeout id %d cancelled", script_data->pid,
+                script_data->timeout_id);
+
+      g_source_remove(script_data->timeout_id);
+      kill(script_data->pid, SIGKILL);
+      g_free(script_data);
+      *scripts = g_slist_delete_link(*scripts, script);
+    }
+  }
 }

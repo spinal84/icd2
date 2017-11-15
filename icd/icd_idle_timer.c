@@ -1,4 +1,5 @@
 #include <gconf/gconf-client.h>
+#include <osso-ic-gconf.h>
 
 #include <string.h>
 #include <stdlib.h>
@@ -349,12 +350,11 @@ icd_idle_timer_init (struct icd_context *icd_ctx)
 {
   GConfClient * gconf = gconf_client_get_default();
 
-  gconf_client_add_dir(gconf, "/system/osso/connectivity/network_type",
+  gconf_client_add_dir(gconf, ICD_GCONF_NETWORK_MAPPING,
                        GCONF_CLIENT_PRELOAD_ONELEVEL, NULL);
 
   icd_ctx->idle_timer_notify =
-      gconf_client_notify_add(gconf,
-                              "/system/osso/connectivity/network_type",
+      gconf_client_notify_add(gconf, ICD_GCONF_NETWORK_MAPPING,
                               icd_idle_timer_gconf_changed, icd_ctx,
                               NULL, NULL);
   g_object_unref(gconf);
@@ -362,4 +362,85 @@ icd_idle_timer_init (struct icd_context *icd_ctx)
   return !!icd_ctx->idle_timer_notify;
 }
 
+/**
+ * @brief Set idle timer for IAP
+ *
+ * @param iap the IAP
+ *
+ * @return TRUE on success, FALSE on failure
+ *
+ */
+gboolean
+icd_idle_timer_set(struct icd_iap *iap)
+{
+  gchar *key;
+  GConfClient *gconf;
+  gint timeout;
+  GError *err;
 
+  if (iap->idletimer_id)
+  {
+    ILOG_CRIT("idle timer already set for iap %p", iap);
+    return FALSE;
+  }
+
+  if (!iap->interface_name || !iap->connection.network_type)
+  {
+    ILOG_WARN("idle timer cannot be set for interface '%s', network type '%s'",
+              iap->interface_name, iap->connection.network_type);
+    return FALSE;
+  }
+
+  key = g_strconcat(ICD_GCONF_NETWORK_MAPPING, "/",
+                    iap->connection.network_type, "/idle_timeout", NULL);
+
+  ILOG_DEBUG(
+        "idle timer type '%s', key '%s'", iap->connection.network_type, key);
+
+  if (!key)
+  {
+    ILOG_ERR("Unable to allocate idle timer gconf key");
+    return FALSE;
+  }
+
+  gconf = gconf_client_get_default();
+  timeout = gconf_client_get_int(gconf, key, &err);
+  g_object_unref(gconf);
+  g_free(key);
+
+  if (err)
+  {
+    ILOG_WARN("idle timer value not found for network type '%s'",
+              iap->connection.network_type);
+    g_error_free(err);
+    return FALSE;
+  }
+
+  if (timeout < 0)
+  {
+    ILOG_WARN("idle timer value %d cannot be negative", timeout);
+    timeout = 0;
+  }
+
+  return icd_idle_timer_start(iap, timeout);
+}
+
+/**
+ * @brief Remove gconf idle timer notification
+ *
+ * @param icd_ctx icd context
+ *
+ */
+void
+icd_idle_timer_remove(struct icd_context *icd_ctx)
+{
+  GConfClient *gconf = gconf_client_get_default();
+
+  if (icd_ctx->idle_timer_notify)
+  {
+    gconf_client_notify_remove(gconf, icd_ctx->idle_timer_notify);
+    gconf_client_remove_dir(gconf, ICD_GCONF_NETWORK_MAPPING, NULL);
+  }
+
+  g_object_unref(gconf);
+}

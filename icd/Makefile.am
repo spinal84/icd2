@@ -8,6 +8,7 @@ icd2_SOURCES =	icd_args.c \
 		icd_pid.c \
 		icd_signal.c \
 		icd_plugin.c \
-		icd_exec.c
+		icd_exec.c \
+		icd_idle_timer.c
 
 MAINTAINERCLEANFILES = Makefile.in

@@ -1,4 +1,5 @@
 #include <gconf/gconf-client.h>
+#include <osso-ic-gconf.h>
 
 #include <stdlib.h>
 
@@ -48,11 +49,7 @@ icd_script_timeout_secs (void)
   gint timeout;
   GError *err = NULL;
   GConfClient *gconf = gconf_client_get_default();
-  GConfValue *val;
-
-  val = gconf_client_get(gconf,
-                         "/system/osso/connectivity/network_scripts/timeout",
-                         &err);
+  GConfValue *val = gconf_client_get(gconf, ICD_SCRIPT_GCONF_PATH, &err);
 
   g_object_unref(gconf);
 
@@ -95,17 +92,12 @@ icd_script_timeout(gpointer data)
 }
 
 static pid_t
-icd_script_run (const gchar *script, const gchar *iface, const gchar *mode,
-                const gchar *phase, const gchar *iap_id, const gchar *iap_type,
-                gboolean remove_proxies, const struct icd_iap_env *env,
-                icd_script_cb_fn cb, gpointer user_data)
+icd_script_exec (const gchar * script, const gchar *iface, const gchar *mode,
+                 const gchar *phase, const gchar *iap_id, const gchar *iap_type,
+                 const gboolean remove_proxies, const struct icd_iap_env *env)
 {
-  pid_t pid, *ppid;
-  struct icd_script_data *script_data;
-  GSList **scripts;
   gchar *path = g_strdup_printf("/etc/network/if-%s.d", mode);
-
-  pid = fork();
+  pid_t pid = fork();
 
   if (pid == -1)
   {
@@ -120,31 +112,31 @@ icd_script_run (const gchar *script, const gchar *iface, const gchar *mode,
 
     if (iface)
     {
-      SETENV("IFACE", iface);
-      SETENV("LOGICAL", iface);
+      SETENV(SCRIPT_IFACE, iface);
+      SETENV(SCRIPT_LOGICAL, iface);
     }
 
     if (remove_proxies)
-      SETENV("ICD_PROXY_UNSET", "1");
+      SETENV(SCRIPT_PROXY_UNSET, "1");
 
     if (env && env->addrfam)
-      SETENV("ADDRFAM", env->addrfam);
+      SETENV(SCRIPT_ADDRFAM, env->addrfam);
 
     if (script)
-      SETENV("MODE", script);
+      SETENV(SCRIPT_MODE, script);
 
     if (phase)
-      SETENV("PHASE", phase);
+      SETENV(SCRIPT_PHASE, phase);
 
-    SETENV("VERBOSITY", "0");
-    SETENV("PATH",
+    SETENV(SCRIPT_VERBOSITY, SCRIPT_VERBOSITY_VALUE);
+    SETENV(SCRIPT_PATH,
            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
 
     if (iap_id)
-      SETENV("ICD_CONNECTION_ID", iap_id);
+      SETENV(SCRIPT_IAP_ID, iap_id);
 
     if (iap_type)
-      SETENV("ICD_CONNECTION_TYPE", iap_type);
+      SETENV(SCRIPT_IAP_TYPE, iap_type);
 
     if (env)
     {
@@ -168,18 +160,75 @@ icd_script_run (const gchar *script, const gchar *iface, const gchar *mode,
 
   g_free(path);
 
-  script_data = g_new0(struct icd_script_data, 1);
-  script_data->pid = pid;
-  script_data->cb = cb;
-  script_data->user_data = user_data;
+  return pid;
+}
 
-  scripts = icd_script_get();
-  *scripts = g_slist_prepend(*scripts, script_data);
+static pid_t
+icd_script_run (const gchar *script, const gchar *iface, const gchar *mode,
+                const gchar *phase, const gchar *iap_id, const gchar *iap_type,
+                gboolean remove_proxies, const struct icd_iap_env *env,
+                icd_script_cb_fn cb, gpointer user_data)
+{
+  pid_t pid;
+  GSList **scripts;
 
-  ppid = g_new(pid_t, 1);
-  *ppid = pid;
-  script_data->timeout_id = g_timeout_add(1000 * icd_script_timeout_secs(),
-                                          icd_script_timeout, ppid);
+  pid = icd_script_exec(script, iface, mode, phase,iap_id, iap_type,
+                        remove_proxies,env);
+
+  if (pid != -1)
+  {
+    struct icd_script_data *script_data = g_new0(struct icd_script_data, 1);
+    pid_t *ppid;
+
+    script_data->pid = pid;
+    script_data->cb = cb;
+    script_data->user_data = user_data;
+
+    scripts = icd_script_get();
+    *scripts = g_slist_prepend(*scripts, script_data);
+
+    ppid = g_new(pid_t, 1);
+    *ppid = pid;
+    script_data->timeout_id = g_timeout_add(1000 * icd_script_timeout_secs(),
+                                            icd_script_timeout, ppid);
+  }
 
   return pid;
+}
+
+pid_t
+icd_script_pre_up(const gchar *iap_id, const gchar *iap_type,
+                  const struct icd_iap_env *env, icd_script_cb_fn cb,
+                  gpointer user_data)
+{
+  return icd_script_run("start", NULL, "pre-up", "pre-up", iap_id, iap_type,
+                        FALSE, env, cb, user_data);
+}
+
+pid_t
+icd_script_post_up(const gchar *iface, const gchar *iap_id,
+                   const gchar *iap_type, const struct icd_iap_env *env,
+                   icd_script_cb_fn cb, gpointer user_data)
+{
+  return icd_script_run("start", iface, "up", "post-up", iap_id, iap_type,
+                        FALSE, env, cb, user_data);
+}
+
+pid_t
+icd_script_pre_down(const gchar *iface, const gchar *iap_id,
+                    const gchar *iap_type, gboolean remove_proxies,
+                    const struct icd_iap_env *env, icd_script_cb_fn cb,
+                    gpointer user_data)
+{
+  return icd_script_run("stop", iface, "down", "pre-down", iap_id, iap_type,
+                        remove_proxies, env, cb, user_data);
+}
+
+pid_t
+icd_script_post_down(const gchar *iface, const gchar *iap_id,
+                     const gchar *iap_type, const struct icd_iap_env *env,
+                     icd_script_cb_fn cb, gpointer user_data)
+{
+  return icd_script_run("stop", iface, "post-down", "post-down", iap_id,
+                        iap_type, FALSE, env, cb, user_data);
 }

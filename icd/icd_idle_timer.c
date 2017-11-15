@@ -40,24 +40,86 @@
   rv; \
 })
 
+/**
+ * @brief Unset idletimer iptables rules
+ *
+ * @param interface the interface name
+ *
+ * @return TRUE on success, FALSE on failure
+ *
+ */
 static gboolean
-icd_idle_timer_set_rules (const gchar *interface, const guint timeout)
+icd_idle_timer_unset_rules (const gchar *interface)
+{
+  gchar *chain = g_strconcat(ICD2_IDLE_TIMER_IPTABLES_PREFIX, interface, NULL);
+  gboolean rv =
+      IPTABLES_EXEC("-D", "OUTPUT", "-o", interface, "-j", chain) &&
+      IPTABLES_EXEC("-F", chain) &&
+      IPTABLES_EXEC("-X", chain);
+
+  g_free(chain);
+
+  if (rv)
+    ILOG_INFO("idle timer unset timeout for interface '%s'", interface);
+  else
+    ILOG_ERR("idle timer unset fork failed");
+
+  return rv;
+}
+
+/**
+ * @brief  Unset idle timer for an IAP
+ *
+ * @param iap the IAP
+ *
+ * @return TRUE on success, FALSE on failure
+ *
+ */
+gboolean
+icd_idle_timer_unset(struct icd_iap *iap)
+{
+  if (iap->idletimer_id)
+  {
+    g_source_remove(iap->idletimer_id);
+    iap->idletimer_id = 0;
+    ILOG_DEBUG("idle timer removed iap %p idle timer id", iap);
+  }
+
+  if (!iap->interface_name)
+  {
+    ILOG_ERR("idle timer iap %p interface is NULL", iap);
+    return FALSE;
+  }
+
+  return icd_idle_timer_unset_rules(iap->interface_name);
+}
+
+/**
+ * @brief Set idletimer iptables rules
+ *
+ * @param interface the interface name
+ * @param timeout_str time in seconds to wait until interface is considered idle
+ *
+ * @return TRUE on success, FALSE on failure
+ *
+ */
+static gboolean
+icd_idle_timer_set_rules (const gchar *interface, const gchar *timeout_str)
 {
   gchar *chain = g_strconcat("icd2-idle-", interface, NULL);
-  gchar *timeout_string = g_strdup_printf("%u", timeout);
-  gboolean rv =
+  gboolean ipt_exec_res =
       IPTABLES_EXEC("-N", chain) &&
       IPTABLES_EXEC("-F", chain) &&
       IPTABLES_EXEC("-A", chain, "-p", "udp", "--sport", "68", "--dport", "67",
                     "-j", "RETURN") &&
       IPTABLES_EXEC("-A", chain, "-p", "icmp", "-j", "RETURN") &&
       IPTABLES_EXEC("-A", chain, "-j", "IDLETIMER", "--timeout",
-                    timeout_string) &&
+                    timeout_str) &&
       IPTABLES_EXEC("-I", "OUTPUT", "-o", interface, "-j", chain);
 
   g_free(chain);
 
-  if (rv)
+  if (ipt_exec_res)
   {
     gchar *sysfs_path =
         g_strdup_printf("/sys/class/net/%s/idletimer", interface);
@@ -67,10 +129,8 @@ icd_idle_timer_set_rules (const gchar *interface, const guint timeout)
       ILOG_ERR("idle timer could not open '%s'", sysfs_path);
     else
     {
-      if (write(fd, timeout_string, strlen(timeout_string)) ==
-          strlen(timeout_string))
+      if (write(fd, timeout_str, strlen(timeout_str)) == strlen(timeout_str))
       {
-        g_free(timeout_string);
         g_free(sysfs_path);
         close(fd);
 
@@ -82,7 +142,6 @@ icd_idle_timer_set_rules (const gchar *interface, const guint timeout)
         close(fd);
       }
 
-      g_free(timeout_string);
       g_free(sysfs_path);
     }
   }
@@ -91,10 +150,20 @@ icd_idle_timer_set_rules (const gchar *interface, const guint timeout)
 
   ILOG_ERR("idle timer failed to set up rules");
 
-  return rv;
+  return FALSE;
 }
 
-gboolean
+/**
+ * @brief Idle timer callback function called when the idle timer has triggered
+ *
+ * @param source the GIOChannel event source
+ * @param condition the condition which has been satisfied
+ * @param data user data set in g_io_add_watch() or g_io_add_watch_full()
+ *
+ * @return FALSE to continue watching idle timer, FALSE to stop
+ *
+ */
+static gboolean
 icd_idle_timer_trigger(GIOChannel *source, GIOCondition condition,
                        gpointer data)
 {
@@ -110,7 +179,7 @@ icd_idle_timer_trigger(GIOChannel *source, GIOCondition condition,
   }
 
   buf[bytes_read] = 0;
-  secs = strtol(buf, 0, 10);
+  secs = strtol(buf, NULL, 10);
 
   ILOG_DEBUG("idle timer triggered for iap %p at %d secs", iap, secs);
 
@@ -124,11 +193,21 @@ icd_idle_timer_trigger(GIOChannel *source, GIOCondition condition,
   return FALSE;
 }
 
+/**
+ * @brief Start idle timer
+ *
+ * @param iap the IAP
+ * @param timeout timeout in seconds
+ *
+ * @return TRUE on successful starting of the idle timer; FALSE on error
+ *
+ */
 static gboolean
 icd_idle_timer_start(struct icd_iap *iap, guint timeout)
 {
   gchar *sysfs_path;
   GIOChannel *io;
+  gchar *timeout_str;
 
   if (!timeout)
     return TRUE;
@@ -140,8 +219,15 @@ icd_idle_timer_start(struct icd_iap *iap, guint timeout)
     iap->idletimer_id = 0;
   }
 
-  if (!icd_idle_timer_set_rules(iap->interface_name, timeout))
+  timeout_str = g_strdup_printf("%u", timeout);
+
+  if (!icd_idle_timer_set_rules(iap->interface_name, timeout_str))
+  {
+    g_free(timeout_str);
     return FALSE;
+  }
+
+  g_free(timeout_str);
 
   sysfs_path = g_strdup_printf("/sys/class/net/%s/idletimer",
                                iap->interface_name);
@@ -264,7 +350,7 @@ icd_idle_timer_init (struct icd_context *icd_ctx)
   GConfClient * gconf = gconf_client_get_default();
 
   gconf_client_add_dir(gconf, "/system/osso/connectivity/network_type",
-                       GCONF_CLIENT_PRELOAD_ONELEVEL, 0);
+                       GCONF_CLIENT_PRELOAD_ONELEVEL, NULL);
 
   icd_ctx->idle_timer_notify =
       gconf_client_notify_add(gconf,

@@ -374,15 +374,19 @@ void
 icd_dbus_cancel_unique_name(DBusPendingCall *pending)
 {
   GSList **unique_list = icd_dbus_get_unique_name_list();
-  GSList *l;
+  GSList *l = *unique_list;
 
 
-  for (l = *unique_list; l; l = l->next)
+  while(l)
   {
+    GSList *next = l->next;
     struct icd_dbus_unique_name_data *unique = l->data;
 
     if (pending && unique->pending != pending)
+    {
+      l = next;
       continue;
+    }
 
     if (unique->pending)
       dbus_pending_call_cancel(unique->pending);
@@ -397,5 +401,7 @@ icd_dbus_cancel_unique_name(DBusPendingCall *pending)
 
     if (pending)
       return;
+
+    l = next;
   }
 }

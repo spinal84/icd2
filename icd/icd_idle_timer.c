@@ -329,7 +329,7 @@ out:
  * @param user_data user data
  */
 static void
-icd_idle_timer_gconf_changed(GConfClient *gconf_client, guint connection_id,
+icd_idle_timer_gconf_changed(GConfClient *client, guint cnxn_id,
                              GConfEntry *entry, gpointer user_data)
 {
   if (g_str_has_suffix(gconf_entry_get_key(entry), "idle_timeout"))

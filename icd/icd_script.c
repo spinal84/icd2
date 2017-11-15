@@ -346,10 +346,11 @@ void
 icd_script_cancel(const pid_t pid)
 {
   GSList **scripts = icd_script_get();
-  GSList *script;
+  GSList *script = *scripts;
 
-  for (script = *scripts; script; script = script->next)
+  while (script)
   {
+    GSList *next = script->next;
     struct icd_script_data *script_data =
         (struct icd_script_data *)script->data;
 
@@ -363,5 +364,7 @@ icd_script_cancel(const pid_t pid)
       g_free(script_data);
       *scripts = g_slist_delete_link(*scripts, script);
     }
+
+    script = next;
   }
 }

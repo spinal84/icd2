@@ -10,28 +10,54 @@ struct icd_scan_cache_list {
   GSList *cache_list;
 };
 
+/** service provider data */
 struct icd_scan_srv_provider {
+  /** service type */
   gchar *service_type;
+
+  /** service level name displayable to the user */
   gchar *service_name;
+
+  /** service attributes */
   guint service_attrs;
+
+  /** service level id */
   gchar *service_id;
+
+  /** service priority inside a service_type */
   gint service_priority;
 };
 
+/** cached scanned networks */
 struct icd_scan_cache {
+  /**  time when the entry was added or updated */
   guint last_seen;
 
+  /** type of network */
   gchar *network_type;
+
+  /** name of the network displayable to user */
   gchar *network_name;
+
+  /** network attributes */
   guint network_attrs;
+
+  /** network id */
   gchar *network_id;
+
+  /** network priority between different network_type */
   gint network_priority;
 
+  /** signal level */
   enum icd_nw_levels signal;
 
+  /** base station MAC address */
   gchar *station_id;
+
+  /* raw signal strength */
   gint dB;
 
+  /** #icd_scan_srv_provider list of service providers for this network */
   GSList *srv_provider_list;
 };
 

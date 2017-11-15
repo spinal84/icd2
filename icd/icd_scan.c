@@ -86,3 +86,59 @@ icd_scan_results_unregister(icd_scan_cb_fn cb, gpointer user_data)
 
   return rv;
 }
+
+/**
+ * @brief Set up the scan cache for a network module
+ *
+ * @param module network module
+ *
+ * @return TRUE on success, FALSE if scan cache already exists
+ *
+ */
+gboolean
+icd_scan_cache_init(struct icd_network_module *module)
+{
+  if (module->scan_cache_table)
+  {
+    ILOG_ERR("scan cache already exists");
+    return FALSE;
+  }
+
+  module->scan_cache_table =
+      g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+
+  return TRUE;
+}
+
+/**
+ * @brief  Free an #icd_scan_cache structure
+ *
+ * @param cache_entry cache entry to free
+ *
+ */
+void
+icd_scan_cache_entry_free(struct icd_scan_cache *cache_entry)
+{
+  GSList *l;
+
+  for (l = cache_entry->srv_provider_list; l; l = g_slist_delete_link(l, l))
+  {
+    struct icd_scan_srv_provider *provider =
+        (struct icd_scan_srv_provider *)l->data;
+
+    if (provider)
+    {
+      g_free(provider->service_type);
+      g_free(provider->service_name);
+      g_free(provider->service_id);
+    }
+
+    g_free(provider);
+  }
+
+  g_free(cache_entry->network_type);
+  g_free(cache_entry->network_name);
+  g_free(cache_entry->network_id);
+  g_free(cache_entry->station_id);
+  g_free(cache_entry);
+}

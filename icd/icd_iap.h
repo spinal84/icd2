@@ -3,35 +3,82 @@
 
 #include "policy_api.h"
 
+/** State of an IAP */
 enum icd_iap_state {
+  /** iap is not connected */
   ICD_IAP_STATE_DISCONNECTED = 0,
+
+  /** iap pre-up script is being run */
   ICD_IAP_STATE_SCRIPT_PRE_UP,
+
+  /** iap is connecting its link layer */
   ICD_IAP_STATE_LINK_UP,
+
+  /** iap is connecting its post link layer, i.e. link authentication */
   ICD_IAP_STATE_LINK_POST_UP,
+
+  /** iap is connecting its ip layer */
   ICD_IAP_STATE_IP_UP,
+
+  /** srv module is being run */
   ICD_IAP_STATE_SRV_UP,
+
+  /** iap (post-)up script is being run */
   ICD_IAP_STATE_SCRIPT_POST_UP,
+
+  /** connection is being saved */
   ICD_IAP_STATE_SAVING,
+
+  /** iap is connected */
   ICD_IAP_STATE_CONNECTED,
+
+  /** iap is being disconnected */
   ICD_IAP_STATE_CONNECTED_DOWN,
+
+  /** srv module is disconnecting */
   ICD_IAP_STATE_SRV_DOWN,
+
+  /** iap is disconnecting its ip layer */
   ICD_IAP_STATE_IP_DOWN,
+
+  /** iap is restarting at ip layer and running post-down and pre-up scripts */
   ICD_IAP_STATE_IP_RESTART_SCRIPTS,
+
+  /** iap is disconnecting its pre link layer, i.e. link deauthenticating */
   ICD_IAP_STATE_LINK_PRE_DOWN,
+
+  /** iap is restarting at pre link layer and running post-down and pre-up scripts */
   ICD_IAP_STATE_LINK_PRE_RESTART_SCRIPTS,
+
+  /** iap is disconnecting its link layer */
   ICD_IAP_STATE_LINK_DOWN,
+
+  /** iap is restarting at link layer and running post-down and pre-up scripts */
   ICD_IAP_STATE_LINK_RESTART_SCRIPTS,
+
+  /** iap post-down script is being run */
   ICD_IAP_STATE_SCRIPT_POST_DOWN,
 
+  /** number of states */
   ICD_IAP_MAX_STATES
 };
 
+/** status of the request */
 enum icd_iap_status {
+  /** a new IAP was created and connected succesfully */
   ICD_IAP_CREATED = 0,
+
+  /** the iap was successfully disconnected */
   ICD_IAP_DISCONNECTED,
+
+  /** iap failed because some other module was in use by another iap */
   ICD_IAP_BUSY,
+
+  /** the iap failed with some critical error while connecting */
   ICD_IAP_FAILED
 };
+
+const gchar* icd_iap_state_names[ICD_IAP_MAX_STATES];
 
 struct icd_iap;
 

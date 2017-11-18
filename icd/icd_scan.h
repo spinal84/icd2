@@ -54,7 +54,7 @@ struct icd_scan_cache {
   /** base station MAC address */
   gchar *station_id;
 
-  /* raw signal strength */
+  /** raw signal strength */
   gint dB;
 
   /** #icd_scan_srv_provider list of service providers for this network */

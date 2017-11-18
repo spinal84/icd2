@@ -3,6 +3,37 @@
 #include "icd_log.h"
 #include "icd_request.h"
 
+/** names for the different states */
+const gchar* icd_iap_state_names[ICD_IAP_MAX_STATES] = {
+  "ICD_IAP_STATE_DISCONNECTED",
+  "ICD_IAP_STATE_SCRIPT_PRE_UP",
+  "ICD_IAP_STATE_LINK_UP",
+  "ICD_IAP_STATE_LINK_POST_UP",
+  "ICD_IAP_STATE_IP_UP",
+  "ICD_IAP_STATE_SRV_UP",
+  "ICD_IAP_STATE_SCRIPT_POST_UP",
+  "ICD_IAP_STATE_SAVING",
+  "ICD_IAP_STATE_CONNECTED",
+  "ICD_IAP_STATE_CONNECTED_DOWN",
+  "ICD_IAP_STATE_SRV_DOWN",
+  "ICD_IAP_STATE_IP_DOWN",
+  "ICD_IAP_STATE_IP_RESTART_SCRIPTS",
+  "ICD_IAP_STATE_LINK_PRE_DOWN",
+  "ICD_IAP_STATE_LINK_PRE_RESTART_SCRIPTS",
+  "ICD_IAP_STATE_LINK_DOWN",
+  "ICD_IAP_STATE_LINK_RESTART_SCRIPTS",
+  "ICD_IAP_STATE_SCRIPT_POST_DOWN"
+};
+
+/** names for status codes */
+static const gchar* icd_iap_status_names[] =
+ {
+  "ICD_IAP_CREATED",
+  "ICD_IAP_DISCONNECTED",
+  "ICD_IAP_BUSY",
+  "ICD_IAP_FAILED"
+};
+
 /**
  * @brief Iterate over all active IAPs
  *

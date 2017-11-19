@@ -7,8 +7,6 @@
 
 #include "icd_backend_gconf.h"
 
-#define ICD_GCONF_IAP ICD_GCONF_SETTINGS "/IAP"
-
 typedef gboolean (*icd_backend_handler_fn)(gchar *, icd_settings_handle_t *);
 
 struct icd_backend_handler_t
@@ -44,7 +42,7 @@ icd_backend_gconf_delete(icd_settings_handle handle)
   GConfClient *  gconf = gconf_client_get_default();
   GError *err = NULL;
 
-  key = g_strconcat(ICD_GCONF_IAP, "/", handle->nw.network_id, NULL);
+  key = g_strconcat(ICD_GCONF_PATH, "/", handle->nw.network_id, NULL);
   gconf_client_recursive_unset(
         gconf, key, GCONF_UNSET_INCLUDING_SCHEMA_NAMES, &err);
 
@@ -67,7 +65,7 @@ icd_backend_gconf_init(struct icd_settings *settings)
   GConfClient *gconf= gconf_client_get_default();
   GSList *l;
 
-  for (l = gconf_client_all_dirs(gconf, ICD_GCONF_IAP, NULL); l;
+  for (l = gconf_client_all_dirs(gconf, ICD_GCONF_PATH, NULL); l;
        l = g_slist_delete_link(l, l))
   {
     if (l->data)
@@ -82,7 +80,7 @@ icd_backend_gconf_init(struct icd_settings *settings)
 #pragma message "\n"
 #pragma message "****************************************************"
       g_strrstr((const gchar *)l->data, "/");
-      handle->set = ICD_GCONF_IAP;
+      handle->set = ICD_GCONF_PATH;
 
       key = g_strconcat((const gchar *)l->data, "/", "type", NULL);
       network_type = gconf_client_get_string(gconf, key, NULL);

@@ -250,7 +250,7 @@ icd_scan_listener_send_entry(struct icd_scan_srv_provider *srv_provider,
  * @brief Check for elements, return immediately on first element found
  *
  * @param key the network_id, not used
- * @param value #the icd_scan_cache_list
+ * @param value the #icd_scan_cache_list
  * @param user_data not used
  *
  * @return TRUE on first non-NULL element found
@@ -258,9 +258,11 @@ icd_scan_listener_send_entry(struct icd_scan_srv_provider *srv_provider,
  */
 static gboolean
 icd_scan_cache_element_check(gpointer key,
-                             struct icd_scan_cache_list *scan_cache_list,
+                             gpointer value,
                              gpointer user_data)
 {
+  struct icd_scan_cache_list *scan_cache_list =
+      (struct icd_scan_cache_list *)value;
   GSList *cache_list;
   gboolean rv = FALSE;
 
@@ -330,4 +332,133 @@ icd_scan_listener_notify(struct icd_network_module *module,
     icd_scan_listener_send_entry(srv_provider, cache_entry,
                                  (struct icd_scan_listener *)l->data, status);
   }
+}
+
+/**
+ * @brief  Hash table callback for removing an entry. Note that this function is
+ * also called outside of hash, so care should be taken when dealing with the
+ * hash (that is why list_entry is not deleted inside this function).
+ *
+ * @param key the network_id
+ * @param value the icd_scan_cache_list struct
+ * @param user_data expiration time
+ *
+ * @return TRUE when all networks for the network_id have been expired and the
+ * hash table element can be removed; FALSE otherwise
+ *
+ */
+static gboolean
+icd_scan_expire_network(gpointer key, gpointer value, gpointer user_data)
+{
+  struct icd_scan_cache_list *scan_cache_list =
+      (struct icd_scan_cache_list *)value;
+  struct icd_scan_expire_network_data *expire_network_data =
+      (struct icd_scan_expire_network_data *)user_data;
+  gchar *network_id = (gchar *)key;
+  GSList *l = scan_cache_list->cache_list;
+  int expired = 0;
+  int entries = 0;
+
+  while (l)
+  {
+    struct icd_scan_cache *cache_entry = (struct icd_scan_cache *)l->data;
+    GSList *next = l->next;
+
+    if (cache_entry)
+    {
+      if (cache_entry->last_seen <= expire_network_data->expire)
+      {
+        icd_scan_listener_notify(
+              expire_network_data->module, NULL, cache_entry, ICD_SCAN_EXPIRE);
+        icd_scan_cache_entry_free(cache_entry);
+        ++expired;
+      }
+    }
+    else
+      ILOG_ERR("NULL cache entry in network '%s'", network_id);
+
+    scan_cache_list->cache_list =
+        g_slist_delete_link(scan_cache_list->cache_list, l);
+
+    l = next;
+    entries++;
+  }
+
+  if (scan_cache_list->cache_list)
+  {
+    if (expired)
+    {
+      ILOG_DEBUG("network id '%s' expired %d/%d entries", network_id, expired,
+                 entries);
+    }
+    return FALSE;
+  }
+
+  ILOG_DEBUG("network id '%s' all entries expired", network_id);
+  return TRUE;
+}
+
+
+/**
+ * @brief Hash table callback for removing an entry, this version is only called
+ * from hash remove func.
+ *
+ * @param key the network_id
+ * @param value the icd_scan_cache_list struct
+ * @param user_data expiration time
+ *
+ * @return TRUE when all networks for the network_id have been expired and the
+ * hash table element can be removed; FALSE otherwise
+ *
+ */
+static gboolean
+icd_scan_expire_network_for_hash(gpointer key, gpointer value,
+                                 gpointer user_data)
+{
+  if (icd_scan_expire_network(key, value, user_data))
+  {
+    g_free(value);
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+/**
+ * @brief  Cache expiry function
+ *
+ * @param data cache timeout data
+ *
+ * @return FALSE to remove the timeout
+ *
+ */
+static gboolean
+icd_scan_cache_expire(gpointer data)
+{
+  struct icd_scan_cache_timeout *scan_cache_timeout;
+
+  scan_cache_timeout = (struct icd_scan_cache_timeout *)data;
+
+  if (scan_cache_timeout->module->scan_progress)
+    ILOG_DEBUG("deferred scan cache expiration for '%s' due to new scan",
+               scan_cache_timeout->module->name);
+  else
+  {
+    struct icd_scan_expire_network_data user_data;
+
+    user_data.module = scan_cache_timeout->module;
+    user_data.expire = time(0) - scan_cache_timeout->module->nw.search_lifetime;
+
+    g_hash_table_foreach_remove(scan_cache_timeout->module->scan_cache_table,
+                                (GHRFunc)icd_scan_expire_network_for_hash,
+                                &user_data);
+  }
+
+  scan_cache_timeout->module->scan_timeout_list =
+      g_slist_remove(scan_cache_timeout->module->scan_timeout_list,
+                     scan_cache_timeout);
+
+  g_free(scan_cache_timeout);
+
+  return FALSE;
 }

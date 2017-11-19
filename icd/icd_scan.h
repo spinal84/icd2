@@ -6,7 +6,11 @@
 #include "network_api.h"
 #include "dbus_api.h"
 
+/** scan cache hash table elements defined like this because we need to update
+ *  the GSList pointer when elements are removed
+ */
 struct icd_scan_cache_list {
+  /** list of #icd_scan_cache elements */
   GSList *cache_list;
 };
 
@@ -61,11 +65,29 @@ struct icd_scan_cache {
   GSList *srv_provider_list;
 };
 
+/** #icd_network_module #scan_timeout_list data. Cache expiry callbacks and
+ *  rescan callbacks will be queued with a pointer to this element with id field
+ *  containing the glib timeout id
+ */
 struct icd_scan_cache_timeout {
+  /** (back)pointer to the network module */
   struct icd_network_module *module;
+
+  /** timeout id */
   guint id;
 };
 
+/**
+ * @brief Scan callback function for receiving scan results
+ *
+ * @param status status of this network
+ * @param srv_provider service provider entry; guaranteed to exist only for the
+ *        lifetime of this callback function
+ * @param cache_entry scan results; guaranteed to exist only for the lifetime of
+ *        this callback function
+ * @param user_data used data given to the scan callback
+ *
+ */
 typedef void
 (*icd_scan_cb_fn) (enum icd_scan_status status,
                    const struct icd_scan_srv_provider *srv_provider,

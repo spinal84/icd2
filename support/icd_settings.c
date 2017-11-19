@@ -23,7 +23,7 @@ icd_settings_init(void)
   return !!icd_settings_get();
 }
 
-static gboolean
+inline static gboolean
 string_equal(const char *a, const char *b)
 {
   if (!a)

@@ -86,8 +86,12 @@ typedef void (*icd_iap_request_cb_fn) (enum icd_iap_status status,
                                        struct icd_iap *iap,
                                        gpointer user_data);
 
+/** Stored disconnect function and private data */
 struct icd_iap_disconnect_data {
+  /** the network module function to call */
   gpointer function;
+
+  /** gpointer * private */
   gpointer *private;
 };
 

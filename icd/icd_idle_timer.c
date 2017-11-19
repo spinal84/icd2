@@ -391,8 +391,7 @@ icd_idle_timer_set(struct icd_iap *iap)
     return FALSE;
   }
 
-  key = g_strconcat(ICD_GCONF_NETWORK_MAPPING, "/",
-                    iap->connection.network_type, "/idle_timeout", NULL);
+  key = ICD_GCONF_NETWORK_IDLE_TIMEOUT(iap->connection.network_type);
 
   ILOG_DEBUG(
         "idle timer type '%s', key '%s'", iap->connection.network_type, key);

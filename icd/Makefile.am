@@ -1,7 +1,7 @@
 sbin_PROGRAMS = icd2
 
-icd2_CFLAGS = -I../support $(ICD_CFLAGS) -Wall -Werror
-icd2_LDADD = $(ICD_LIBS) ../support/libicd_log.la
+icd2_CFLAGS = -I../support $(ICD_CFLAGS) -Wall
+icd2_LDADD = $(ICD_LIBS) ../support/libicd_log.la ../support/libicd_dbus.la
 
 icd2_SOURCES =	icd_args.c \
 		icd_context.c \
@@ -13,6 +13,11 @@ icd2_SOURCES =	icd_args.c \
 		icd_iap.c \
 		icd_script.c \
 		icd_network_api.c \
-		icd_scan.c
+		icd_scan.c \
+		icd_type_modules.c \
+		icd_dbus_api.c \
+		icd_request.c \
+		icd_name_owner.c \
+		icd_tracking_info.c
 
 MAINTAINERCLEANFILES = Makefile.in

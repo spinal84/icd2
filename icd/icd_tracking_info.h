@@ -4,14 +4,22 @@
 #include <glib.h>
 #include <dbus/dbus.h>
 
+/** which D-Bus interface the tracking info is for */
 enum icd_tracking_info_api {
   ICD_TRACKING_INFO_ICD,
   ICD_TRACKING_INFO_ICD2
 };
 
+/** Tracking info for D-Bus users. Needed for creating a reply to
+ *  ICD_CONNECT_REQ and possible future user reference counting
+ */
 struct icd_tracking_info {
   enum icd_tracking_info_api interface;
+
+  /** D-Bus sender */
   gchar *sender;
+
+  /** D-Bus message that needs a reply */
   DBusMessage *request;
 };
 

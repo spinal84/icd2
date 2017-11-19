@@ -193,6 +193,18 @@ icd_network_api_status_update(gchar *network_type, guint network_attrs,
   }
 }
 
+/**
+ * @brief Function for closing down a connection by request of a network module
+ *
+ * @param status reason for closing; ICD_NW_RESTART if the IAP needs to be
+ * restarted, success or error will both close the network connection
+ * @param err_str NULL if the network was disconnected normally or any
+ * ICD_DBUS_ERROR_* from osso-ic-dbus.h on error
+ * @param network_type the type of the IAP returned
+ * @param network_attrs attributes, such as type of network_id, security, etc.
+ * @param network_id IAP name or local id, e.g. SSID
+ *
+ */
 void
 icd_network_api_close(enum icd_nw_status status, const gchar *err_str,
                       const gchar *network_type, const guint network_attrs,
@@ -207,8 +219,8 @@ icd_network_api_close(enum icd_nw_status status, const gchar *err_str,
     return;
   }
 
-  if (state >= ICD_IAP_STATE_CONNECTED_DOWN &&
-      state <= ICD_IAP_STATE_SCRIPT_POST_DOWN)
+  if (iap->state >= ICD_IAP_STATE_CONNECTED_DOWN &&
+      iap->state <= ICD_IAP_STATE_SCRIPT_POST_DOWN)
   {
     ILOG_INFO("close requested for IAP %p ignored, already in state %s", iap,
               icd_iap_state_names[iap->state]);
@@ -240,7 +252,7 @@ icd_network_api_close(enum icd_nw_status status, const gchar *err_str,
       if (status == ICD_NW_ERROR && err_str)
         err = err_str;
       else
-        err = "com.nokia.icd.error.network_error";
+        err = ICD_DBUS_ERROR_NETWORK_ERROR;
 
       icd_iap_disconnect(iap, err);
       break;

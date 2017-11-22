@@ -18,6 +18,8 @@ icd2_SOURCES =	icd_args.c \
 		icd_dbus_api.c \
 		icd_request.c \
 		icd_name_owner.c \
-		icd_tracking_info.c
+		icd_tracking_info.c \
+		icd_srv_provider.c \
+		icd_gconf.c
 
 MAINTAINERCLEANFILES = Makefile.in

@@ -36,6 +36,28 @@ static const gchar const *icd_scan_status_names[] =
 };
 
 /**
+ * @brief Helper function for comparing two strings where a NULL string is equal
+ * to another NULL string
+ *
+ * @param a string A
+ * @param b string B
+ *
+ * @return TRUE if equal, FALSE if unequal
+ *
+ */
+inline static gboolean
+string_equal(const char *a, const char *b)
+{
+  if (!a)
+    return !b;
+
+  if (b)
+    return !strcmp(a, b);
+
+  return FALSE;
+}
+
+/**
  * @brief Remove all matching listener callback - user data tuples from a module
  *
  * @param module the network module
@@ -461,4 +483,70 @@ icd_scan_cache_expire(gpointer data)
   g_free(scan_cache_timeout);
 
   return FALSE;
+}
+
+struct icd_scan_cache_list *
+icd_scan_cache_list_lookup(struct icd_network_module *module,
+                           const gchar *network_id)
+{
+  if (!module || !module->scan_cache_table)
+    return NULL;
+
+  return (struct icd_scan_cache_list *)
+      g_hash_table_lookup(module->scan_cache_table, network_id);
+}
+
+static gboolean
+icd_scan_cache_remove_iap_for_module(struct icd_network_module *module,
+                                     gpointer user_data)
+{
+  struct icd_scan_cache_list *scan_cache_list;
+  GSList *net_type;
+
+  scan_cache_list = icd_scan_cache_list_lookup(module,
+                                               (const gchar *)user_data);
+
+  if (!scan_cache_list)
+    return TRUE;
+
+  for (net_type = module->network_types; net_type; net_type = net_type->next)
+  {
+    GSList *cache_list = scan_cache_list->cache_list;
+    const gchar *network_type = (const gchar *)net_type->data;
+    GSList *next;
+
+    while (cache_list)
+    {
+      struct icd_scan_cache *cache = (struct icd_scan_cache *)cache_list->data;
+      next = cache_list->next;
+
+      if (cache && cache->network_attrs & ICD_NW_ATTR_IAPNAME &&
+          string_equal(cache->network_type, network_type))
+      {
+        ILOG_DEBUG("removing %s, name=%s, attrs=0x%x, type=%s",
+                   cache->network_id,
+                   cache->network_name,
+                   cache->network_attrs,
+                   cache->network_type);
+
+        icd_scan_listener_notify(module, NULL, cache, ICD_SCAN_EXPIRE);
+        icd_scan_cache_entry_free(cache);
+        scan_cache_list->cache_list =
+            g_slist_delete_link(scan_cache_list->cache_list, cache_list);
+
+      }
+
+      cache_list = next;
+    }
+  }
+
+  return TRUE;
+}
+
+void
+icd_scan_cache_remove_iap(gchar *iap_name)
+{
+  icd_network_api_foreach_module(icd_context_get(),
+                                 icd_scan_cache_remove_iap_for_module,
+                                 iap_name);
 }

@@ -65,7 +65,7 @@ struct icd_scan_cache {
   GSList *srv_provider_list;
 };
 
-/** #icd_network_module #scan_timeout_list data. Cache expiry callbacks and
+/** #icd_network_module.scan_timeout_list data. Cache expiry callbacks and
  *  rescan callbacks will be queued with a pointer to this element with id field
  *  containing the glib timeout id
  */

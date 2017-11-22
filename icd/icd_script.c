@@ -368,3 +368,43 @@ icd_script_cancel(const pid_t pid)
     script = next;
   }
 }
+
+gboolean
+icd_script_notify_pid(const pid_t pid, const gint exit_value)
+{
+  GSList **scripts = icd_script_get();
+  GSList *l;
+
+  for (l = *scripts; l; l = l->next)
+  {
+    struct icd_script_data *data = (struct icd_script_data *)l->data;
+
+    if (data)
+    {
+      if (data->pid == pid)
+      {
+        ILOG_DEBUG("script cb %p with pid %d, exit value %d, user data %p",
+                   data->cb, pid, exit_value, data->user_data);
+
+        if (data->timeout_id)
+        {
+          g_source_remove(data->timeout_id);
+          data->timeout_id = 0;
+        }
+
+        if (data->cb)
+          data->cb(pid, exit_value, data->user_data);
+
+        g_free(l->data);
+        *scripts = g_slist_delete_link(*scripts, l);
+        return TRUE;
+      }
+    }
+    else
+      ILOG_ERR("script list contains NULL data");
+  }
+
+  ILOG_INFO("script with pid %d does not exist", pid);
+
+  return FALSE;
+}

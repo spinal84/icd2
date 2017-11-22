@@ -23,6 +23,16 @@ icd_settings_init(void)
   return !!icd_settings_get();
 }
 
+/**
+ * @brief Helper function for comparing two strings where a NULL string is equal
+ * to another NULL string
+ *
+ * @param a string A
+ * @param b string B
+ *
+ * @return TRUE if equal, FALSE if unequal
+ *
+ */
 inline static gboolean
 string_equal(const char *a, const char *b)
 {

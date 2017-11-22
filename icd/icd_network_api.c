@@ -55,7 +55,7 @@ icd_network_api_foreach_module(struct icd_context *icd_ctx,
 }
 
 /** pid and exit value structure */
-struct  pid_notify {
+struct pid_notify {
   /** process id */
   pid_t pid;
   /** exit value  */

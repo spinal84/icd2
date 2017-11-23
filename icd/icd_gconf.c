@@ -6,7 +6,6 @@
 #include "icd_context.h"
 #include "icd_scan.h"
 
-
 #define ICD_GCONF_IAP_TYPE            "type"
 #define ICD_GCONF_IAP_NAME            "name"
 #define ICD_GCONF_IAP_IS_TEMPORARY    "temporary"
@@ -180,4 +179,64 @@ icd_gconf_add_notify(void)
   g_object_unref(gconf);
 
   return icd_ctx->iap_deletion_notify != 0;
+}
+
+gboolean
+icd_gconf_rename(const gchar *settings_name, const gchar *name)
+{
+  if (settings_name && *settings_name && name && *name)
+  {
+    GConfClient *gconf = gconf_client_get_default();
+    char *id = gconf_escape_key(settings_name, -1);
+    gchar *key = g_strdup_printf(ICD_GCONF_PATH "/%s/name", id);
+
+    if (!gconf_client_set_string(gconf, key, name, 0))
+      ILOG_ERR("settings could not save '%s' to '%s'", name, key);
+
+    g_free(key);
+
+    key = g_strdup_printf(ICD_GCONF_PATH "/%s/temporary", id);
+
+    if (!gconf_client_unset(gconf, key, 0))
+      ILOG_ERR("settings could not unset '%s'", key, name);
+
+    g_free(key);
+    g_free(id);
+    g_object_unref(gconf);
+    return TRUE;
+  }
+
+  ILOG_ERR("settings '%s' and name '%s' must both be non-empty",
+           settings_name, name);
+
+  return FALSE;
+}
+
+gchar *
+icd_gconf_get_iap_string(const char *iap_name, const char *key_name)
+{
+  GConfClient *gconf = gconf = gconf_client_get_default();
+  GError *err = NULL;
+  char *id = gconf_escape_key(iap_name, -1);
+  gchar *key = g_strdup_printf(ICD_GCONF_PATH "/%s/%s", id, key_name);
+  gchar *rv;
+
+  g_free(id);
+  rv = gconf_client_get_string(gconf, key, &err);
+  g_free(key);
+  icd_gconf_check_error(&err);
+  g_object_unref(gconf);
+
+  return rv;
+}
+
+void
+icd_gconf_del_notify(void)
+{
+  struct icd_context *icd_ctx = icd_context_get();
+  GConfClient *gconf = gconf_client_get_default();
+
+  gconf_client_notify_remove(gconf, icd_ctx->iap_deletion_notify);
+  icd_ctx->iap_deletion_notify = 0;
+  g_object_unref(gconf);
 }

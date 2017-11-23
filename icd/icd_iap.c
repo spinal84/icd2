@@ -1,14 +1,24 @@
+#include <sys/types.h>
+#include <unistd.h>
+#include <glib.h>
+#include <string.h>
 #include <gconf/gconf-client.h>
-
-#include "icd_context.h"
+#include <osso-ic-dbus.h>
+#include <osso-ic-gconf.h>
 #include "icd_iap.h"
-#include "icd_log.h"
-#include "icd_request.h"
 #include "icd_network_api.h"
-#include "icd_script.h"
+#include "icd_log.h"
+#include "icd_context.h"
+#include "icd_policy_api.h"
 #include "icd_idle_timer.h"
-#include "icd_srv_provider.h"
+#include "icd_request.h"
+#include "icd_script.h"
+#include "network_api.h"
+#include "icd_gconf.h"
+#include "icd_osso_ic.h"
 #include "icd_status.h"
+#include "icd_srv_provider.h"
+#include "icd_dbus_api.h"
 
 /** names for the different states */
 const gchar *icd_iap_state_names[ICD_IAP_MAX_STATES] = {
@@ -486,4 +496,47 @@ icd_iap_find(const gchar *network_type, const guint network_attrs,
   }
 
   return NULL;
+}
+
+static void
+icd_iap_do_callback(enum icd_iap_status status, struct icd_iap *iap)
+{
+  ILOG_INFO("IAP status is %s", icd_iap_status_names[status]);
+
+  iap->request_cb(status, iap, iap->request_cb_user_data);
+}
+
+static void
+icd_iap_modules_reset(struct icd_iap *iap)
+{
+  iap->current_module = NULL;
+}
+
+static void
+icd_iap_has_connected(struct icd_iap *iap)
+{
+  iap->state = ICD_IAP_STATE_CONNECTED;
+  icd_iap_modules_reset(iap);
+  icd_idle_timer_set(iap);
+  icd_iap_do_callback(ICD_IAP_CREATED, iap);
+}
+
+gboolean
+icd_iap_rename(struct icd_iap *iap, const gchar *name)
+{
+  gboolean rv = FALSE;
+
+  if (iap->id && !iap->id_is_local)
+  {
+    rv = icd_gconf_rename(iap->id, name);
+
+    ILOG_INFO("IAP %p settings '%s' renamed to '%s'", iap, iap->id, name);
+  }
+  else
+    ILOG_ERR("iap id is unset when renaming");
+
+  if (iap->state == ICD_IAP_STATE_SAVING)
+    icd_iap_has_connected(iap);
+
+  return rv;
 }

@@ -74,7 +74,7 @@ icd_name_owner_filter(DBusConnection *connection, DBusMessage *message,
 
         ILOG_WARN("connectivity UI service '"ICD_UI_DBUS_SERVICE"' exited");
 
-        request = icd_request_find(NULL, NULL, OSSO_IAP_ASK);
+        request = icd_request_find(NULL, 0, OSSO_IAP_ASK);
 
         if (request)
           icd_request_cancel(request, ICD_POLICY_ATTRIBUTE_CONN_UI);

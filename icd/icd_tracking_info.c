@@ -87,7 +87,7 @@ struct icd_tracking_info *
 icd_tracking_info_find(const gchar *sender)
 {
   return (struct icd_tracking_info *)
-      icd_request_foreach(icd_tracking_info_foreach, sender);
+      icd_request_foreach(icd_tracking_info_foreach, (gpointer)sender);
 }
 
 /**

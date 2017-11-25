@@ -555,7 +555,7 @@ icd_scan_cache_remove_iap(gchar *iap_name)
  * @brief Remove scan cache from scan list, the removed entry does not call
  * listener.
  *
- * @param cache_list the icd_scan_cache_list struct
+ * @param scan_cache_list the icd_scan_cache_list struct
  * @param network_id network identifier
  * @param network_type the network type
  * @param network_attrs network attributes

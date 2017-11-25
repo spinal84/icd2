@@ -190,15 +190,15 @@ icd_gconf_rename(const gchar *settings_name, const gchar *name)
     char *id = gconf_escape_key(settings_name, -1);
     gchar *key = g_strdup_printf(ICD_GCONF_PATH "/%s/name", id);
 
-    if (!gconf_client_set_string(gconf, key, name, 0))
+    if (!gconf_client_set_string(gconf, key, name, NULL))
       ILOG_ERR("settings could not save '%s' to '%s'", name, key);
 
     g_free(key);
 
     key = g_strdup_printf(ICD_GCONF_PATH "/%s/temporary", id);
 
-    if (!gconf_client_unset(gconf, key, 0))
-      ILOG_ERR("settings could not unset '%s'", key, name);
+    if (!gconf_client_unset(gconf, key, NULL))
+      ILOG_ERR("settings could not unset '%s'", key);
 
     g_free(key);
     g_free(id);

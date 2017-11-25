@@ -15,6 +15,18 @@
 #include "icd_name_owner.h"
 #include "icd_network_priority.h"
 
+/** ICd request status names */
+static const gchar *icd_request_status_names[ICD_REQUEST_MAX] = {
+  "ICD_REQUEST_POLICY_PENDING",
+  "ICD_REQUEST_WAITING",
+  "ICD_REQUEST_CHANGETO",
+  "ICD_REQUEST_MERGED",
+  "ICD_REQUEST_CONNECTING_IAPS",
+  "ICD_REQUEST_SUCCEEDED",
+  "ICD_REQUEST_DENIED",
+  "ICD_REQUEST_DISCONNECTED"
+};
+
 /**
  * @brief Helper function for comparing two strings where a NULL string is equal
  * to another NULL string
@@ -190,5 +202,120 @@ icd_request_tracking_info_delete(const gchar *sender)
   }
 
   return icd_request_foreach(
-        icd_request_tracking_info_delete_foreach, sender) != NULL;
+        icd_request_tracking_info_delete_foreach, (gpointer)sender) != NULL;
+}
+
+void
+icd_request_send_nack(struct icd_request *request)
+{
+  icd_osso_ic_send_nack(request->users);
+  icd_dbus_api_send_nack(request->users, NULL);
+  g_slist_free(request->users);
+  request->users = NULL;
+}
+
+static void
+icd_request_free(struct icd_request *request)
+{
+  struct icd_context *icd_ctx = icd_context_get();
+
+  icd_ctx->request_list = g_slist_remove(icd_ctx->request_list, request);
+
+  if (request->try_iaps)
+    ILOG_CRIT("Request %p still has IAPs when free called", request);
+
+  if (request->users)
+  {
+    ILOG_CRIT("Request %p still has dbus user tracking info when free called",
+              request);
+  }
+
+  g_free(request->req.service_type);
+  g_free(request->req.service_id);
+  g_free(request->req.network_type);
+  g_free(request->req.network_id);
+  g_free(request);
+}
+
+static void
+icd_request_update_status(enum icd_request_status status,
+                          struct icd_request *request)
+{
+  ILOG_DEBUG("request %p with status %s", request,
+             icd_request_status_names[status]);
+
+  request->state = status;
+}
+
+void
+icd_request_free_iaps(struct icd_request *request)
+{
+  GSList *l;
+
+  for (l = request->try_iaps; l; request->try_iaps = l)
+  {
+    struct icd_iap *iap = (struct icd_iap *)l->data;
+
+    if (!iap)
+      ILOG_CRIT("IAP in request list is NULL");
+    else
+      icd_iap_free(iap);
+
+    l = g_slist_delete_link(l, l);
+  }
+}
+
+void
+icd_request_cancel(struct icd_request *request, guint policy_attrs)
+{
+  struct icd_context *icd_ctx = icd_context_get();
+
+  if (request->try_iaps)
+  {
+    if (request->state && request->state != ICD_REQUEST_WAITING)
+    {
+      gint refcount;
+      struct icd_iap *iap = (struct icd_iap *)request->try_iaps->data;
+
+      if (policy_attrs & ICD_POLICY_ATTRIBUTE_CONN_UI)
+        refcount = -1;
+      else
+        refcount = g_slist_length(request->users);
+
+      if (!icd_ctx->shutting_down &&
+          icd_policy_api_iap_disconnect(&iap->connection, refcount))
+      {
+        ILOG_INFO("disconnect policy refused to disconnect iap %p", iap);
+      }
+      else
+      {
+        icd_status_disconnect(iap, NULL, NULL);
+        request->try_iaps = g_slist_remove(request->try_iaps, iap);
+        icd_request_free_iaps(request);
+        request->try_iaps = g_slist_prepend(request->try_iaps, iap);
+        icd_iap_disconnect(iap, NULL);
+      }
+
+      return;
+    }
+
+    goto cancel_policy_req;
+  }
+
+  if (request->state == ICD_REQUEST_POLICY_PENDING ||
+      request->state == ICD_REQUEST_WAITING)
+  {
+cancel_policy_req:
+    ILOG_DEBUG("canceling policy request %p, state %d", &request->req,
+               request->state);
+
+    icd_policy_api_request_cancel(&request->req);
+  }
+
+  icd_request_free_iaps(request);
+  icd_request_update_status(ICD_REQUEST_DENIED, request);
+
+  ILOG_INFO("request %p cancelled", request);
+
+  icd_request_free(request);
 }

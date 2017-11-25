@@ -550,3 +550,50 @@ icd_scan_cache_remove_iap(gchar *iap_name)
                                  icd_scan_cache_remove_iap_for_module,
                                  iap_name);
 }
+
+/**
+ * @brief Remove scan cache from scan list, the removed entry does not call
+ * listener.
+ *
+ * @param cache_list the icd_scan_cache_list struct
+ * @param network_id network identifier
+ * @param network_type the network type
+ * @param network_attrs network attributes
+ *
+ * @return TRUE if scan entry was removed; FALSE otherwise
+ *
+ */
+gboolean
+icd_scan_cache_entry_remove(struct icd_scan_cache_list *scan_cache_list,
+                            const gchar *network_id,
+                            const gchar *network_type,
+                            const guint network_attrs)
+{
+  GSList *l = scan_cache_list->cache_list;
+  gint entries = 0;
+
+  while (l)
+  {
+    struct icd_scan_cache *cache = (struct icd_scan_cache *)l->data;
+    GSList *next = l->next;
+
+    if (cache && cache->network_attrs == network_attrs &&
+        string_equal(cache->network_type, network_type))
+    {
+      GSList *tmp;
+
+      icd_scan_cache_entry_free(cache);
+      tmp = g_slist_delete_link(scan_cache_list->cache_list, l);
+      entries++;
+      l = next;
+      scan_cache_list->cache_list = tmp;
+    }
+
+    l = next;
+  }
+
+  if (!scan_cache_list->cache_list)
+    ILOG_DEBUG("network id '%s' all entries (%d) removed", network_id, entries);
+
+  return !!entries;
+}

@@ -12,6 +12,13 @@ struct icd_policy_module {
   struct icd_policy_api policy;
 };
 
+/**
+ * @brief Callback for the new_connection policy request
+ *
+ * @param status status of the policy request
+ * @param policy_request the policy request structure
+ *
+ */
 typedef void
 (*icd_policy_api_request_cb_fn) (enum icd_policy_status status,
                                  struct icd_policy_request *req);

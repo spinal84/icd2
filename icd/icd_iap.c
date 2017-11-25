@@ -460,6 +460,16 @@ icd_iap_disconnect(struct icd_iap *iap, const gchar *err_str)
   }
 }
 
+/**
+ * @brief Find an IAP according type, attributes and id
+ *
+ * @param network_type the type of the IAP
+ * @param network_attrs attributes
+ * @param network_id IAP id
+ *
+ * @return a pointer to the IAP on success, NULL on failure
+ *
+ */
 struct icd_iap *
 icd_iap_find(const gchar *network_type, const guint network_attrs,
              const gchar *network_id)
@@ -498,6 +508,15 @@ icd_iap_find(const gchar *network_type, const guint network_attrs,
   return NULL;
 }
 
+/**
+ * @brief Report the final status of the connection attempt to the caller. Do
+ * notice that the IAP is freed by the caller, do not use it after calling this
+ * function
+ *
+ * @param status the status to report
+ * @param iap the IAP
+ *
+ */
 static void
 icd_iap_do_callback(enum icd_iap_status status, struct icd_iap *iap)
 {
@@ -506,12 +525,24 @@ icd_iap_do_callback(enum icd_iap_status status, struct icd_iap *iap)
   iap->request_cb(status, iap, iap->request_cb_user_data);
 }
 
+/**
+ * @brief Reset the list of modules to try
+ *
+ * @param iap the IAP
+ *
+ */
 static void
 icd_iap_modules_reset(struct icd_iap *iap)
 {
   iap->current_module = NULL;
 }
 
+/**
+ * @brief Notify the caller (request) that the IAP has connected
+ *
+ * @param iap the IAP
+ *
+ */
 static void
 icd_iap_has_connected(struct icd_iap *iap)
 {
@@ -521,6 +552,14 @@ icd_iap_has_connected(struct icd_iap *iap)
   icd_iap_do_callback(ICD_IAP_CREATED, iap);
 }
 
+/**
+ * @brief Rename an IAP and continue connecting it if it's in
+ * #ICD_IAP_STATE_SAVING
+ *
+ * @param iap the IAP
+ * @param name the new name of the IAP
+ *
+ */
 gboolean
 icd_iap_rename(struct icd_iap *iap, const gchar *name)
 {
@@ -539,4 +578,89 @@ icd_iap_rename(struct icd_iap *iap, const gchar *name)
     icd_iap_has_connected(iap);
 
   return rv;
+}
+
+/**
+ * @brief Free up an iap structure
+ *
+ * @param iap the IAP to free
+ *
+ */
+void
+icd_iap_free(struct icd_iap *iap)
+{
+  GSList *l1;
+  GSList *l2;
+
+  if (!iap)
+    return;
+
+  if (iap->current_module || iap->ip_down_list || iap->link_pre_down_list ||
+      iap->link_down_list)
+  {
+    ILOG_CRIT("Removing active IAP %p/%p/%p/%p", iap->current_module,
+              iap->ip_down_list, iap->link_pre_down_list, iap->link_down_list);
+  }
+
+  if ( iap->id && !iap->id_is_local )
+  {
+    if (*iap->id)
+      icd_gconf_remove_temporary(iap->id);
+
+    ILOG_DEBUG("IAP %s/%s/0x%04x cache check", iap->connection.network_id,
+               iap->connection.network_type, iap->connection.network_attrs);
+
+    if (iap->current_module)
+    {
+      struct icd_network_module *module =
+          (struct icd_network_module *)g_slist_nth_data(iap->current_module, 0);
+      struct icd_scan_cache_list *cache_list =
+          icd_scan_cache_list_lookup(module, iap->connection.network_id);
+
+      if (cache_list)
+      {
+        ILOG_DEBUG("IAP %s found in the cache list, removing it.",
+                   iap->connection.network_id);
+
+        if (icd_scan_cache_entry_remove(cache_list, iap->connection.network_id,
+                                        iap->connection.network_type,
+                                        iap->connection.network_attrs))
+        {
+          ILOG_DEBUG("Removed temp IAP %p from cache.", iap);
+        }
+        else
+          ILOG_DEBUG("Temp IAP %p not found in cache.", iap);
+      }
+    }
+  }
+
+  g_free(iap->id);
+  g_free(iap->connection.service_type);
+  g_free(iap->service_name);
+  g_free(iap->connection.service_id);
+  g_free(iap->connection.network_type);
+  g_free(iap->network_name);
+  g_free(iap->connection.network_id);
+  g_free(iap->interface_name);
+  g_free(iap->err_str);
+
+  for (l1 = iap->script_env; l1; iap->script_env = l1)
+  {
+    struct icd_iap_env *env = l1->data;
+
+    for (l2 = env->envlist; l2; env->envlist = l2)
+    {
+      g_free(l2->data);
+      l2 = g_slist_delete_link(env->envlist, env->envlist);
+    }
+
+    g_free(env->addrfam);
+    g_free(env);
+
+    l1 = g_slist_delete_link(iap->script_env, iap->script_env);
+  }
+
+  ILOG_DEBUG("Freeing IAP %p", iap);
+
+  g_free(iap);
 }

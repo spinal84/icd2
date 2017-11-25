@@ -82,6 +82,13 @@ const gchar* icd_iap_state_names[ICD_IAP_MAX_STATES];
 
 struct icd_iap;
 
+/**
+ * @brief The IAP status callback function
+ *
+ * @param status the status from the IAP creation process
+ * @param iap the IAP
+ * @param user_data user data
+ */
 typedef void (*icd_iap_request_cb_fn) (enum icd_iap_status status,
                                        struct icd_iap *iap,
                                        gpointer user_data);
@@ -95,54 +102,145 @@ struct icd_iap_disconnect_data {
   gpointer *private;
 };
 
+/** structure for storing script environment variables */
 struct icd_iap_env {
+  /** address family */
   gchar *addrfam;
+
+  /** env var list */
   GSList *envlist;
 };
 
+/** Definition of a real network IAP */
 struct icd_iap {
+  /** unique id of this IAP */
   gchar *id;
+
+  /**
+   * Wheter the id is local to icd2 only or a globally known one found in
+   * gconf.
+   */
   gboolean id_is_local;
 
+
+  /** what state the IAP currently is in */
   enum icd_iap_state state;
+
+  /** limited service provider connectivity */
   gboolean limited_conn;
 
+
+  /** service level name displayable to the user */
   gchar *service_name;
+
+  /** name of the network displayable to user */
   gchar *network_name;
+
+  /**
+   * service and network indetification attributes compatible with the policy
+   * framework due to #ICD_NW_RESTART policy check
+   */
   struct icd_policy_request connection;
+
+  /** network interface */
   gchar *interface_name;
+
+  /** idle timer id */
   guint idletimer_id;
 
+
+  /** module that is busy serving other IAPs causing current IAP to fail */
   struct icd_network_module *busy;
 
+
+  /** list of network modules associated with this network type */
   GSList *network_modules;
+
+  /** current network module */
   GSList *current_module;
+
+  /** list of icd_iap_disconnect ip down functions to call on disconnect */
   GSList *ip_down_list;
+
+  /**
+   * list of icd_iap_disconnect link pre down functions to call on disconnect
+   */
   GSList *link_pre_down_list;
+
+  /** list of link down functions to call on disconnect */
   GSList *link_down_list;
 
+
+  /** service provider connect callback */
   gpointer srv_connect_cb;
+
+  /** service provider connect user data */
   gpointer srv_connect_cb_user_data;
+
+  /** service provider disconnect callback */
   gpointer srv_disconnect_cb;
+
+  /** service provider disconnect user data */
   gpointer srv_disconnect_cb_user_data;
 
+
+  /** what layer to restart */
   enum icd_nw_layer restart_layer;
+
+  /**
+   * what state the restart came from; used to figure out wheter network scripts
+   * need to be run
+   */
   enum icd_iap_state restart_state;
+
+  /** monitor how many times the IAP has been restarted */
   guint restart_count;
+
+  /** what layer to renew */
   enum icd_nw_layer renew_layer;
+
+  /** what module is being renewed */
   GSList *current_renew_module;
 
+
+  /**
+   * wheter the module did all the user prompting and retry dialogs are not
+   * needed
+   */
   gboolean user_interaction_done;
+
+  /** error that caused iap to fail */
   gchar *err_str;
 
+
+  /** opaque token for save dialog request */
   gpointer save_dlg;
+
+  /** request status callback */
   icd_iap_request_cb_fn request_cb;
+
+  /** user data to pass to the callback */
   gpointer request_cb_user_data;
 
+  /** list of struct #icd_iap_env environment variables */
   GSList *script_env;
+
+  /** list of script pids being waited for */
   GSList *script_pids;
 };
 
+/**
+ * @brief Iterator function called for each active IAP structure starting from
+ * the structure associated with the newest request. Only active IAPs are
+ * iterated through, not the ones in a request that will be tried if the current
+ * one fails.
+ *
+ * @param iap the IAP struct
+ * @param user_data user data
+ *
+ * @return TRUE to continue, FALSE to stop iterating
+ *
+ */
 typedef gboolean (*icd_iap_foreach_fn) (struct icd_iap *iap,
                                         gpointer user_data);
 

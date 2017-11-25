@@ -594,6 +594,89 @@ icd_dbus_api_state_scanning(struct icd_network_module *module,
 }
 
 /**
+ * @brief Iterator function calling the given send function
+ *
+ * @param iap the IAP
+ * @param user_data foreach data
+ *
+ * @return TRUE to go through all IAPs
+ *
+ */
+static gboolean
+icd_dbus_api_foreach_iap_all(struct icd_iap *iap, gpointer user_data)
+{
+  struct icd_dbus_api_foreach_data *foreach_data =
+      (struct icd_dbus_api_foreach_data *)user_data;
+
+  if (iap && foreach_data->send_fn)
+  {
+    if (foreach_data->send_fn(iap, user_data))
+      foreach_data->connections++;
+  }
+
+  return TRUE;
+}
+
+static gboolean
+icd_dbus_api_foreach_iap_req(DBusMessage *message,
+                             struct icd_dbus_api_foreach_data *foreach_data)
+{
+  struct icd_iap *iap;
+  DBusMessageIter iter;
+  guint network_attrs;
+  gchar *unused;
+  gchar *network_id;
+  gchar *network_type;
+
+  if (dbus_message_iter_init(message, &iter))
+  {
+    dbus_message_iter_get_basic(&iter, &unused);
+    dbus_message_iter_next(&iter);
+    dbus_message_iter_get_basic(&iter, &unused);
+    dbus_message_iter_next(&iter);
+    dbus_message_iter_get_basic(&iter, &unused);
+    dbus_message_iter_next(&iter);
+    dbus_message_iter_get_basic(&iter, &network_type);
+    dbus_message_iter_next(&iter);
+    dbus_message_iter_get_basic(&iter, &network_attrs);
+    dbus_message_iter_next(&iter);
+
+    if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_ARRAY ||
+        dbus_message_iter_get_element_type(&iter) != DBUS_TYPE_BYTE)
+    {
+      ILOG_ERR("%s: dbus api wrong type for network id", "info");
+    }
+    else
+    {
+      int len = 0;
+      DBusMessageIter sub;
+
+      dbus_message_iter_recurse(&iter, &sub);
+      dbus_message_iter_get_fixed_array(&sub, &network_id, &len);
+
+      if (len > 0 && network_id[len])
+      {
+        network_id = (gchar *)g_realloc(network_id, len + 1);
+        network_id[len] = 0;
+      }
+    }
+
+    dbus_message_iter_next(&iter);
+    iap = icd_iap_find(network_type, network_attrs, network_id);
+
+    if (iap && foreach_data->send_fn)
+    {
+      foreach_data->connections = 1;
+      foreach_data->send_fn(iap, foreach_data);
+    }
+  }
+  else
+    icd_iap_foreach(icd_dbus_api_foreach_iap_all, foreach_data);
+
+  return TRUE;
+}
+
+/**
  * @brief Handle state requests
  *
  * @param conn D-Bus connection

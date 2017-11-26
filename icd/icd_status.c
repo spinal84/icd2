@@ -109,3 +109,19 @@ icd_status_connect(struct icd_iap *iap, const gchar *dbus_destination,
                          dbus_destination, err_str);
   icd_dbus_api_update_state(iap, dbus_destination, ICD_STATE_CONNECTING);
 }
+
+void
+icd_status_connected(struct icd_iap *iap, const gchar *dbus_destination,
+                     const gchar *err_str)
+{
+  gchar *id;
+
+  if (!iap->id || iap->id_is_local)
+    id = iap->connection.network_id;
+  else
+    id = iap->id;
+
+  icd_status_send_signal(iap->connection.network_type, id, "CONNECTED",
+                         dbus_destination, err_str);
+  icd_dbus_api_update_state(iap, dbus_destination, ICD_STATE_CONNECTED);
+}

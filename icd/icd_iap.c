@@ -664,3 +664,29 @@ icd_iap_free(struct icd_iap *iap)
 
   g_free(iap);
 }
+
+
+void
+icd_iap_renew(struct icd_iap *iap, enum icd_nw_layer renew_layer)
+{
+  if (iap->renew_layer)
+  {
+    ILOG_DEBUG("ignoring iap %p renew, already renewing %s", iap,
+               icd_iap_layer_names[iap->renew_layer]);
+    return;
+  }
+
+  iap->renew_layer = renew_layer;
+  iap->current_renew_module = iap->network_modules;
+
+  if (!icd_iap_run_renew(iap))
+  {
+    ILOG_DEBUG("no renew function for %s iap %p, %s/%0x/%s, restarting %s",
+               icd_iap_layer_names[renew_layer], iap,
+               iap->connection.network_type, iap->connection.network_attrs,
+               iap->connection.network_id, icd_iap_layer_names[renew_layer]);
+
+    iap->renew_layer = ICD_NW_LAYER_NONE;
+    icd_iap_restart(iap, renew_layer);
+  }
+}

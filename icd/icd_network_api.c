@@ -37,7 +37,6 @@ icd_network_api_foreach_module(struct icd_context *icd_ctx,
     return NULL;
   }
 
-  ;
   for (l = icd_ctx->nw_module_list; l; l = l->next)
   {
     struct icd_network_module *module = (struct icd_network_module *)l->data;
@@ -258,4 +257,79 @@ icd_network_api_close(enum icd_nw_status status, const gchar *err_str,
       break;
     }
   }
+}
+
+static void
+icd_network_api_renew(enum icd_nw_layer renew_layer, const gchar *network_type,
+                      const guint network_attrs, const gchar *network_id)
+{
+  struct icd_iap *iap = icd_iap_find(network_type, network_attrs, network_id);
+
+  if (!iap)
+  {
+    ILOG_WARN("network renew requested for %s/%0x/%s, but no matching IAP",
+              network_type, network_attrs, network_id);
+  }
+
+  ILOG_DEBUG("network renew for iap %p %s/%0x/%s layer %d requested", iap,
+             network_type, network_attrs, network_id, renew_layer);
+
+  switch (iap->state)
+  {
+    case ICD_IAP_STATE_DISCONNECTED:
+    case ICD_IAP_STATE_SCRIPT_PRE_UP:
+      ILOG_WARN("cannot renew anything in state %s",
+                icd_iap_state_names[iap->state]);
+      return;
+    case ICD_IAP_STATE_LINK_UP:
+      if (renew_layer == ICD_NW_LAYER_NONE ||
+          renew_layer == ICD_NW_LAYER_LINK || renew_layer == ICD_NW_LAYER_ALL)
+      {
+        icd_iap_restart(iap, renew_layer);
+        return;
+      }
+
+      break;
+    case ICD_IAP_STATE_LINK_POST_UP:
+      if (renew_layer == ICD_NW_LAYER_LINK_POST)
+        icd_iap_restart(iap, renew_layer);
+      else if (renew_layer == ICD_NW_LAYER_NONE ||
+               renew_layer == ICD_NW_LAYER_LINK ||
+               renew_layer == ICD_NW_LAYER_ALL)
+      {
+        icd_iap_renew(iap, renew_layer);
+      }
+      else
+        break;
+
+      return;
+    case ICD_IAP_STATE_IP_UP:
+      if (renew_layer == ICD_NW_LAYER_IP)
+        icd_iap_restart(iap, renew_layer);
+      else if (renew_layer != ICD_NW_LAYER_SERVICE)
+        icd_iap_renew(iap, renew_layer);
+      else
+          break;
+
+      return;
+    case ICD_IAP_STATE_SRV_UP:
+      if (renew_layer != ICD_NW_LAYER_SERVICE)
+        icd_iap_renew(iap, renew_layer);
+      else
+        icd_iap_restart(iap, renew_layer);
+
+      return;
+    case ICD_IAP_STATE_SCRIPT_POST_UP:
+    case ICD_IAP_STATE_SAVING:
+    case ICD_IAP_STATE_CONNECTED:
+      icd_iap_renew(iap, renew_layer);
+      return;
+    default:
+      ILOG_DEBUG("no need to renew anything in state %s while going down",
+                 icd_iap_state_names[iap->state]);
+      return;
+  }
+
+  ILOG_DEBUG("in state %s, no need to renew anything",
+             icd_iap_state_names[iap->state]);
 }

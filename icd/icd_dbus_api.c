@@ -722,3 +722,32 @@ icd_dbus_api_state_req(DBusConnection *conn, DBusMessage *msg, void *user_data)
 
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
+
+void
+icd_dbus_api_send_nack(GSList *tracklist, struct icd_iap *iap)
+{
+  GSList *l;
+
+  for (l = tracklist; l; l = l->next)
+  {
+    struct icd_tracking_info *track = (struct icd_tracking_info *)l->data;
+    enum icd_connect_status status;
+
+    if (track && track->interface == ICD_TRACKING_INFO_ICD2)
+    {
+      if (iap)
+        status = ICD_CONNECTION_DISCONNECTED;
+      else
+        status = ICD_CONNECTION_NOT_CONNECTED;
+
+      icd_dbus_api_send_connect_sig(status, track->sender, iap);
+
+      if (track->request)
+        dbus_message_unref(track->request);
+
+      g_free(track->sender);
+      g_free(track);
+      l->data = NULL;
+    }
+  }
+}

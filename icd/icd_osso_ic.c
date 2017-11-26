@@ -71,12 +71,101 @@ struct icd_osso_ic_handler {
   icd_osso_ic_message_handler handler;
 };
 
+
+static gchar *
+icd_osso_ic_get_type(const gchar *iap_name)
+{
+  return icd_gconf_get_iap_string(iap_name, ICD_GCONF_IAP_TYPE);
+}
+
+static DBusMessage *
+icd_osso_ic_make_request(struct icd_request *merge_request,
+                         struct icd_tracking_info *track, DBusMessage *message,
+                         const gchar *requested_iap, const guint flags)
+{
+  guint network_attrs = ICD_NW_ATTR_IAPNAME;
+  struct icd_request *request;
+  gchar *network_type = NULL;
+
+  if (strcmp("[ANY]", requested_iap) && strcmp("[ASK]", requested_iap))
+  {
+    network_type = icd_osso_ic_get_type(requested_iap);
+
+    if (!network_type)
+    {
+      ILOG_ERR("network type cannot be NULL for requested iap '%s'", requested_iap);
+      return dbus_message_new_error(message, ICD_DBUS_ERROR_INVALID_IAP,
+                                    "IAP type not found in gconf");
+    }
+
+    if (icd_wlan_defs_is_wlan(network_type))
+      network_attrs |= icd_wlan_defs_get_secmode(requested_iap);
+  }
+
+  request = icd_request_new(flags, NULL, 0, NULL, network_type, network_attrs,
+                            requested_iap);
+
+  if (merge_request)
+    icd_request_merge(merge_request, request);
+
+  if (track)
+    icd_request_tracking_info_add(request, track);
+
+  icd_request_make(request);
+  g_free(network_type);
+
+  return NULL;
+}
+
+static DBusMessage *
+icd_osso_ic_connect(DBusMessage *method_call, void *user_data)
+{
+  DBusMessage *msg;
+
+  if (dbus_message_get_type(method_call) == DBUS_MESSAGE_TYPE_METHOD_CALL)
+  {
+    struct icd_tracking_info *track;
+    DBusError error;
+    guint flags;
+    gchar *iap;
+
+    dbus_error_init(&error);
+    dbus_message_get_args(method_call, &error,
+                          DBUS_TYPE_STRING, &iap,
+                          DBUS_TYPE_UINT32, &flags,
+                          DBUS_TYPE_INVALID);
+    dbus_error_free(&error);
+
+    if (flags & OSSO_IAP_TIMED_CONNECT)
+    {
+      flags = ICD_POLICY_ATTRIBUTE_BACKGROUND |
+          ICD_POLICY_ATTRIBUTE_NO_INTERACTION;
+    }
+    else
+      flags = 0;
+
+    track = icd_tracking_info_new(ICD_TRACKING_INFO_ICD,
+                                  dbus_message_get_sender(method_call),
+                                  method_call);
+
+    msg = icd_osso_ic_make_request(NULL, track, method_call, iap, flags);
+  }
+  else
+  {
+    ILOG_ERR("message to 'connect' is not a method call");
+    msg = dbus_message_new_error(method_call, DBUS_ERROR_NOT_SUPPORTED,
+                                 "Message is not a method call");
+  }
+
+  return msg;
+}
+
 /** OSSO IC API method call handlers */
 static struct icd_osso_ic_handler icd_osso_ic_htable[] = {
 /*  {ICD_DBUS_INTERFACE, ICD_ACTIVATE_REQ, "s", icd_osso_ic_activate},
-  {ICD_DBUS_INTERFACE, ICD_SHUTDOWN_REQ, "", icd_osso_ic_shutdown},
+  {ICD_DBUS_INTERFACE, ICD_SHUTDOWN_REQ, "", icd_osso_ic_shutdown},*/
   {ICD_DBUS_INTERFACE, ICD_CONNECT_REQ, "su", icd_osso_ic_connect},
-  {ICD_DBUS_INTERFACE, ICD_DISCONNECT_REQ, "s", icd_osso_ic_disconnect},
+  /*{ICD_DBUS_INTERFACE, ICD_DISCONNECT_REQ, "s", icd_osso_ic_disconnect},
   {ICD_DBUS_INTERFACE, ICD_GET_IPINFO_REQ, "", icd_osso_ic_ipinfo},
   {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "", icd_osso_ic_connstats},
   {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "s", icd_osso_ic_connstats},
@@ -131,12 +220,6 @@ icd_osso_ui_disconnect(DBusMessage *signal, void *user_data)
   }
 
   return NULL;
-}
-
-static gchar *
-icd_osso_ic_get_type(const gchar *iap_name)
-{
-  return icd_gconf_get_iap_string(iap_name, ICD_GCONF_IAP_TYPE);
 }
 
 static DBusMessage *
@@ -322,5 +405,47 @@ icd_osso_ui_send_save_cancel(gpointer send_save_token)
   {
     dbus_pending_call_cancel(*pending);
     g_free(pending);
+  }
+}
+
+void
+icd_osso_ic_send_nack(GSList *tracking_list)
+{
+  GSList *l;
+
+  for (l = tracking_list; l; l = l->next)
+  {
+    struct icd_tracking_info *track = (struct icd_tracking_info *)l->data;
+
+    if (track->interface == ICD_TRACKING_INFO_ICD )
+    {
+      if (track->request)
+      {
+        DBusMessage *msg =
+            dbus_message_new_error(track->request,
+                                   ICD_DBUS_ERROR_IAP_NOT_AVAILABLE,
+                                   "Failed to establish requested IAP");
+
+        if (msg)
+        {
+          ILOG_INFO("Sending nack to '%s'", track->sender);
+
+          icd_dbus_send_system_msg(msg);
+          dbus_message_unref(msg);
+        }
+        else
+        {
+          ILOG_CRIT("failed to create nack for '%s' for request %p",
+                    track->sender, track->request);
+        }
+
+        dbus_message_unref(track->request);
+        track->request = NULL;
+      }
+
+      g_free(track->sender);
+      g_free(track);
+      l->data = NULL;
+    }
   }
 }

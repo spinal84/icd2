@@ -319,3 +319,139 @@ cancel_policy_req:
 
   icd_request_free(request);
 }
+
+void
+icd_request_tracking_info_add(struct icd_request *request,
+                              struct icd_tracking_info *track)
+{
+  if (request && track)
+  {
+    request->users = g_slist_prepend(request->users, track);
+    icd_name_owner_add_filter(track->sender);
+
+    ILOG_DEBUG("tracking info sender '%s' and message %p added to request %p",
+               track->sender, track->request, request);
+  }
+}
+
+struct icd_request *
+icd_request_new(guint policy_attrs, const gchar *service_type,
+                const guint service_attrs, const gchar *service_id,
+                const gchar *network_type, const guint network_attrs,
+                const gchar *network_id)
+{
+  struct icd_request *request;
+
+  request = g_new0(struct icd_request, 1);
+  request->req.attrs = policy_attrs;
+  request->req.service_attrs = service_attrs;
+  request->req.service_type = g_strdup(service_type);
+  request->req.service_id = g_strdup(service_id);
+  request->req.network_attrs = network_attrs;
+  request->req.network_type = g_strdup(network_type);
+  request->req.request_token = request;
+  request->req.network_priority = -1;
+  request->req.network_id = g_strdup(network_id);
+
+  return request;
+}
+
+static gpointer
+icd_request_make_check_duplicate(struct icd_request *request,
+                                 gpointer user_data)
+{
+  if (user_data != request)
+    return NULL;
+
+  return request;
+}
+
+static void
+icd_request_connect(struct icd_request *request)
+{
+  struct icd_request *new_request;
+
+  if (!icd_request_try_iap(request))
+  {
+    ILOG_INFO("No IAPs created, ask user");
+
+    new_request = icd_request_new(
+          ICD_POLICY_ATTRIBUTE_BACKGROUND |
+          ICD_POLICY_ATTRIBUTE_CONNECTIONS_FAILED |
+          ICD_POLICY_ATTRIBUTE_NO_INTERACTION,
+          NULL, 0, NULL, NULL, 0, "[ASK]");
+    icd_request_merge(request, new_request);
+    icd_request_make(new_request);
+  }
+}
+
+static void
+icd_request_connect_iaps(enum icd_policy_status status,
+                         struct icd_policy_request *req)
+{
+  struct icd_context *icd_ctx = icd_context_get();
+  struct icd_request *request;
+
+  if (!req)
+  {
+    ILOG_CRIT("returned request is NULL after new_request policy modules");
+    return;
+  }
+
+  request = (struct icd_request *)req->request_token;
+
+  if (icd_ctx->shutting_down || status == ICD_POLICY_REJECTED ||
+      status == ICD_POLICY_MERGED )
+  {
+    ILOG_INFO("final status for new request is %d", status);
+
+    icd_request_update_status(ICD_REQUEST_DENIED, request);
+    icd_request_send_nack(request);
+    icd_request_free_iaps(request);
+    icd_request_free(request);
+  }
+  else if (status == ICD_POLICY_WAITING)
+  {
+    ILOG_INFO("request %p is waiting for actions", request);
+
+    icd_request_update_status(ICD_REQUEST_WAITING, request);
+  }
+  else
+  {
+    if (g_slist_length(request->try_iaps) > 1)
+      request->multi_iaps = TRUE;
+    icd_request_connect(request);
+  }
+}
+
+void
+icd_request_make(struct icd_request *request)
+{
+  struct icd_context *icd_ctx = icd_context_get();
+
+  if (icd_ctx->shutting_down)
+  {
+    ILOG_INFO("no more requests, we're shutting down");
+    icd_request_update_status(ICD_REQUEST_DISCONNECTED, request);
+    icd_request_send_nack(request);
+    icd_request_free_iaps(request);
+    icd_request_free(request);
+    return;
+  }
+
+  ILOG_DEBUG("requesting request %p, attr %0x, %s/%0x/%s,%s/%0x/%s",
+             request, request->req.attrs, request->req.service_type,
+             request->req.service_attrs, request->req.service_id,
+             request->req.network_type, request->req.network_attrs,
+             request->req.network_id);
+
+  if (icd_request_foreach(icd_request_make_check_duplicate, request))
+  {
+    ILOG_DEBUG("icd request %p already exists in list, not adding it twice",
+               request);
+  }
+  else
+    icd_ctx->request_list = g_slist_prepend(icd_ctx->request_list, request);
+
+  icd_policy_api_new_request(&request->req, icd_request_connect_iaps, NULL);
+}

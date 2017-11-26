@@ -18,6 +18,41 @@
 #include "icd_status.h"
 #include "icd_wlan_defs.h"
 
+/** milliseconds to wait for UI to respond to requests; used only for log
+ * message printing for now
+ */
+#define ICD_OSSO_UI_REQUEST_TIMEOUT   4 * 1000
+
+/** connection statistics */
+struct icd_osso_ic_stats_data {
+  /** method call for the statistics request */
+  DBusMessage *request;
+
+  /** time active */
+  guint time_active;
+
+  /** signal strength */
+  enum icd_nw_levels signal;
+
+  /** base station id */
+  gchar *station_id;
+
+  /** raw signal strength */
+  gint dB;
+
+  /** received packets */
+  guint rx_packets;
+
+  /** sent packets */
+  guint tx_packets;
+
+  /** received bytes */
+  guint rx_bytes;
+
+  /** sent bytes */
+  guint tx_bytes;
+};
+
 /**
  * @brief Callback function called when a UI retry or save request has
  * completed
@@ -567,4 +602,92 @@ icd_osso_ic_send_nack(GSList *tracking_list)
       l->data = NULL;
     }
   }
+}
+
+static void
+icd_osso_ic_ui_pending(DBusPendingCall *pending, void *user_data)
+{
+  struct icd_osso_ic_mcall_data *data =
+      (struct icd_osso_ic_mcall_data *)user_data;
+  DBusMessage *reply;
+  gboolean success = FALSE;
+
+  reply = dbus_pending_call_steal_reply(pending);
+
+  if (data->pending_call)
+  {
+    dbus_pending_call_unref(data->pending_call);
+    data->pending_call = NULL;
+  }
+
+  if (dbus_message_get_type(reply) != DBUS_MESSAGE_TYPE_ERROR )
+    success = TRUE;
+
+  if (success)
+    ILOG_DEBUG("'%s' successfully requested from UI", data->mcall_name);
+  else
+  {
+    ILOG_DEBUG("'%s' requested from UI but returned: '%s'", data->mcall_name,
+               dbus_message_get_error_name(reply));
+  }
+
+  if (data->cb)
+  {
+    ILOG_DEBUG("icd UI callback %p called with success '%d' user data %p",
+               data->cb, success, data->user_data);
+    data->cb(success, data->user_data);
+  }
+  else
+    ILOG_DEBUG("icd UI callback NULL");
+
+  g_free(data);
+}
+
+void
+icd_osso_ui_send_retry(const gchar *iap_name, const gchar *error,
+                       icd_osso_ui_cb_fn cb, gpointer user_data)
+{
+  struct icd_osso_ic_mcall_data *mcall_data;
+  DBusMessage *mcall;
+  DBusPendingCall *pending;
+
+  mcall_data = g_new0(struct icd_osso_ic_mcall_data, 1);
+  mcall_data->user_data = user_data;
+  mcall_data->cb = cb;
+  mcall_data->mcall_name = ICD_UI_SHOW_RETRY_REQ;
+  mcall = dbus_message_new_method_call(ICD_UI_DBUS_SERVICE,
+                                       ICD_UI_DBUS_PATH,
+                                       ICD_UI_DBUS_INTERFACE,
+                                       ICD_UI_SHOW_RETRY_REQ);
+  if (mcall)
+  {
+    if (dbus_message_append_args(mcall,
+                                 DBUS_TYPE_STRING, &iap_name,
+                                 DBUS_TYPE_STRING, &error,
+                                 DBUS_TYPE_INVALID))
+    {
+      pending = icd_dbus_send_system_mcall(mcall, ICD_OSSO_UI_REQUEST_TIMEOUT,
+                                           icd_osso_ic_ui_pending, mcall_data);
+      mcall_data->pending_call = pending;
+
+      if (pending)
+      {
+        dbus_message_unref(mcall);
+        return;
+      }
+
+      ILOG_WARN("icd UI mcall '%s' could not be sent", mcall_data->mcall_name);
+    }
+    else
+      ILOG_ERR("could not append args to '%s' request", mcall_data->mcall_name);
+
+    dbus_message_unref(mcall);
+  }
+  else
+    ILOG_ERR("could not create '%s' request", mcall_data->mcall_name);
+
+  if (mcall_data->cb)
+    mcall_data->cb(FALSE, mcall_data->user_data);
+
+  g_free(mcall_data);
 }

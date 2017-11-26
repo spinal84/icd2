@@ -455,3 +455,15 @@ icd_request_make(struct icd_request *request)
 
   icd_policy_api_new_request(&request->req, icd_request_connect_iaps, NULL);
 }
+
+static void
+icd_request_tracking_info_free(struct icd_request *request)
+{
+  GSList *l;
+
+  for (l = request->users; l; l = l->next)
+    icd_tracking_info_free((struct icd_tracking_info *)l->data);
+
+  g_slist_free(request->users);
+  request->users = NULL;
+}

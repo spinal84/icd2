@@ -690,3 +690,102 @@ icd_iap_renew(struct icd_iap *iap, enum icd_nw_layer renew_layer)
     icd_iap_restart(iap, renew_layer);
   }
 }
+
+static void
+icd_iap_pre_up_script_done(const pid_t pid, const gint exit_value,
+                           gpointer user_data)
+{
+  struct icd_iap *iap = (struct icd_iap *)user_data;
+
+  iap->script_pids = g_slist_remove(iap->script_pids, GINT_TO_POINTER(pid));
+
+  ILOG_DEBUG("iap %p in state %s pre-up scripts run, continue connecting", iap,
+             icd_iap_state_names[iap->state]);
+
+  switch (iap->state)
+  {
+    case ICD_IAP_STATE_LINK_PRE_RESTART_SCRIPTS:
+      iap->state = ICD_IAP_STATE_LINK_POST_UP;
+      break;
+    case ICD_IAP_STATE_LINK_RESTART_SCRIPTS:
+      iap->state = ICD_IAP_STATE_LINK_UP;
+      break;
+    case ICD_IAP_STATE_IP_RESTART_SCRIPTS:
+      iap->state = ICD_IAP_STATE_IP_UP;
+      break;
+    default:
+      /* Shut up the compiler */
+      break;
+  }
+
+  icd_iap_module_next(iap);
+}
+
+static void
+icd_iap_run_pre_up_scripts(struct icd_iap *iap)
+{
+  char *id;
+  pid_t pid;
+
+  if (iap->id && !iap->id_is_local )
+    id = gconf_escape_key(iap->id, -1);
+  else
+    id = NULL;
+
+  pid = icd_script_pre_up(id, iap->connection.network_type, NULL,
+                          icd_iap_pre_up_script_done, iap);
+  g_free(id);
+  iap->script_pids = g_slist_prepend(iap->script_pids, GINT_TO_POINTER(pid));
+}
+
+void
+icd_iap_connect(struct icd_iap *iap, icd_iap_request_cb_fn request_cb,
+                gpointer user_data)
+{
+  struct icd_context *icd_ctx = icd_context_get();
+  GSList *modules;
+
+  if (!request_cb)
+  {
+    ILOG_CRIT("IAP connect callback is NULL");
+    return;
+  }
+
+  if (!iap)
+  {
+      ILOG_CRIT("IAP to try is NULL");
+      request_cb(ICD_IAP_FAILED, 0, user_data);
+      return;
+  }
+
+  iap->busy = FALSE;
+
+  if (iap->state != ICD_IAP_STATE_DISCONNECTED )
+  {
+    ILOG_ERR("IAP %p is in state %s, not connecting it again", iap,
+             icd_iap_state_names[iap->state]);
+    return;
+  }
+
+  iap->request_cb = request_cb;
+  iap->request_cb_user_data = user_data;
+  modules = (GSList *)g_hash_table_lookup(icd_ctx->type_to_module,
+                                          iap->connection.network_type);
+  iap->network_modules = modules;
+
+  if (modules)
+  {
+    icd_iap_modules_reset(iap);
+
+    ILOG_DEBUG("Request to connect iap %p", iap);
+
+    iap->state = ICD_IAP_STATE_SCRIPT_PRE_UP;
+    icd_iap_run_pre_up_scripts(iap);
+  }
+  else
+  {
+    ILOG_ERR("unknown network type '%s' requested for iap %p",
+             iap->connection.network_type, iap);
+    icd_iap_do_callback(ICD_IAP_FAILED, iap);
+  }
+}

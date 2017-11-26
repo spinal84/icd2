@@ -71,6 +71,11 @@ struct icd_osso_ic_handler {
   icd_osso_ic_message_handler handler;
 };
 
+struct icd_osso_ic_get_state_data
+{
+  const char *sender;
+  guint connections;
+};
 
 static gchar *
 icd_osso_ic_get_type(const gchar *iap_name)
@@ -160,6 +165,120 @@ icd_osso_ic_connect(DBusMessage *method_call, void *user_data)
   return msg;
 }
 
+static DBusMessage *
+icd_osso_ic_bg_killed(DBusMessage *method_call, void *user_data)
+{
+  gchar *s;
+  struct icd_tracking_info *track;
+  const gchar *sender;
+  const gchar *application;
+
+  dbus_message_get_args(method_call, NULL,
+                        DBUS_TYPE_STRING, &application,
+                        DBUS_TYPE_STRING, &sender,
+                        DBUS_TYPE_INVALID);
+
+  s = g_strdup_printf("com.nokia.%s", application);
+  track = icd_tracking_info_find(sender);
+
+  if (track)
+  {
+    ILOG_INFO("application '%s' ('%s') background killed", application, sender);
+
+    icd_tracking_info_update(track, s, NULL);
+  }
+  else
+  {
+    ILOG_DEBUG("application '%s' ('%s') background killed but not tracked",
+               application, sender);
+  }
+
+  g_free(s);
+
+  return dbus_message_new_method_return(method_call);
+}
+
+static gpointer
+icd_osso_ic_get_state_foreach(struct icd_request *request, gpointer user_data)
+{
+  struct icd_osso_ic_get_state_data *state_data;
+  struct icd_iap *iap;
+
+  state_data = (struct icd_osso_ic_get_state_data *)user_data;
+
+  if (request->try_iaps)
+  {
+    ILOG_DEBUG("querying connection state for request %p", request);
+
+    iap = (struct icd_iap *)request->try_iaps->data;
+
+    if (iap)
+    {
+      switch ( iap->state )
+      {
+        case ICD_IAP_STATE_SCRIPT_PRE_UP:
+        case ICD_IAP_STATE_LINK_UP:
+        case ICD_IAP_STATE_LINK_POST_UP:
+        case ICD_IAP_STATE_IP_UP:
+        case ICD_IAP_STATE_SCRIPT_POST_UP:
+        case ICD_IAP_STATE_SAVING:
+          icd_status_connect(iap, state_data->sender, NULL);
+          state_data->connections++;
+          return NULL;
+        case ICD_IAP_STATE_SRV_UP:
+          if (iap->limited_conn)
+            icd_status_limited_conn(iap, state_data->sender, NULL);
+          else
+            icd_status_connect(iap, state_data->sender, NULL);
+          break;
+        case ICD_IAP_STATE_CONNECTED:
+          icd_status_connected(iap, state_data->sender, NULL);
+          break;
+        case ICD_IAP_STATE_CONNECTED_DOWN:
+        case ICD_IAP_STATE_SRV_DOWN:
+        case ICD_IAP_STATE_IP_DOWN:
+        case ICD_IAP_STATE_LINK_PRE_DOWN:
+        case ICD_IAP_STATE_LINK_DOWN:
+        case ICD_IAP_STATE_SCRIPT_POST_DOWN:
+          icd_status_disconnect(iap, state_data->sender, NULL);
+          break;
+        default:
+          return NULL;
+      }
+
+      state_data->connections++;
+    }
+    else
+      ILOG_CRIT("request %p, NULL iap", request);
+  }
+  else
+    ILOG_DEBUG("request %p does not have any IAPs", request);
+
+  return NULL;
+}
+
+static DBusMessage *
+icd_osso_ic_get_state(DBusMessage *method_call, void *user_data)
+{
+  struct icd_osso_ic_get_state_data *state_data;
+  DBusMessage *msg;
+
+  state_data = g_new0(struct icd_osso_ic_get_state_data, 1);
+  state_data->sender = dbus_message_get_sender(method_call);
+  icd_request_foreach(icd_osso_ic_get_state_foreach, state_data);
+
+  ILOG_INFO("connection state for %d connections sent",
+            state_data->connections);
+
+  msg = dbus_message_new_method_return(method_call);
+  dbus_message_append_args(msg,
+                           DBUS_TYPE_UINT32, &state_data->connections,
+                           DBUS_TYPE_INVALID);
+  g_free(state_data);
+
+  return msg;
+}
+
 /** OSSO IC API method call handlers */
 static struct icd_osso_ic_handler icd_osso_ic_htable[] = {
 /*  {ICD_DBUS_INTERFACE, ICD_ACTIVATE_REQ, "s", icd_osso_ic_activate},
@@ -168,10 +287,10 @@ static struct icd_osso_ic_handler icd_osso_ic_htable[] = {
   /*{ICD_DBUS_INTERFACE, ICD_DISCONNECT_REQ, "s", icd_osso_ic_disconnect},
   {ICD_DBUS_INTERFACE, ICD_GET_IPINFO_REQ, "", icd_osso_ic_ipinfo},
   {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "", icd_osso_ic_connstats},
-  {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "s", icd_osso_ic_connstats},
+  {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "s", icd_osso_ic_connstats},*/
   {ICD_DBUS_INTERFACE, ICD_GET_STATE_REQ, "", icd_osso_ic_get_state},
   {ICD_DBUS_INTERFACE, "background_killing_application", "ss",
-   icd_osso_ic_bg_killed},*/
+   icd_osso_ic_bg_killed},
   {NULL}
 };
 

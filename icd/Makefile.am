@@ -25,6 +25,7 @@ icd2_SOURCES =	icd_args.c \
 		icd_status.c \
 		icd_network_priority.c \
 		icd_policy_api.c \
-		icd_wlan_defs.c
+		icd_wlan_defs.c \
+		icd_version.c
 
 MAINTAINERCLEANFILES = Makefile.in

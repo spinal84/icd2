@@ -80,6 +80,8 @@ const gchar const* icd_policy_api_state[] = {
   "ICD_POLICY_REJECTED"
 };
 
+static GSList *scan_list = NULL;
+
 /**
  * @brief Module iterator for the 'cancel_request' function.
  *
@@ -495,4 +497,9 @@ void
 icd_policy_api_iap_succeeded(struct icd_policy_request *connection)
 {
   icd_policy_api_run(icd_policy_api_iap_succeeded_iter, connection, NULL);
+}
+
+static GSList **icd_policy_api_scan_list_get(void)
+{
+  return &scan_list;
 }

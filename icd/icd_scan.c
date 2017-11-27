@@ -597,3 +597,76 @@ icd_scan_cache_entry_remove(struct icd_scan_cache_list *scan_cache_list,
 
   return !!entries;
 }
+
+void
+icd_scan_cache_remove(struct icd_network_module *module)
+{
+  GSList *l;
+
+  if (module->scan_timeout_rescan)
+  {
+    g_source_remove(module->scan_timeout_rescan);
+    module->scan_timeout_rescan = 0;
+  }
+
+  l = module->scan_timeout_list;
+
+  while (l)
+  {
+    struct icd_scan_cache_timeout *timeout =
+        (struct icd_scan_cache_timeout *)l->data;
+    GSList *next = l->next;
+
+    if (timeout)
+    {
+      g_source_remove(timeout->id);
+      g_free(timeout);
+    }
+    else
+      ILOG_ERR("timeout data NULL");
+
+    module->scan_timeout_list =
+        g_slist_delete_link(module->scan_timeout_list, l);
+    l = next;
+  }
+
+  if (module->scan_cache_table)
+  {
+    struct icd_scan_expire_network_data user_data;
+
+    user_data.module = module;
+    user_data.expire = time(0) + 1;
+    g_hash_table_foreach_remove(module->scan_cache_table,
+                                (GHRFunc)icd_scan_expire_network_for_hash,
+                                &user_data);
+  }
+
+  icd_scan_listener_remove(module, NULL, NULL);
+}
+
+static void
+icd_scan_listener_send_list(gpointer key, gpointer value, gpointer user_data)
+{
+  GSList *l;
+
+  for (l = ((struct icd_scan_cache_list *)value)->cache_list; l; l = l->next)
+  {
+    icd_scan_listener_send_entry(NULL, (struct icd_scan_cache *)l->data,
+        (struct icd_scan_listener *)user_data, ICD_SCAN_NEW);
+  }
+}
+
+static gboolean
+icd_scan_cache_rescan(gpointer data)
+{
+  struct icd_network_module *module = (struct icd_network_module *)data;
+
+  module->scan_timeout_rescan = 0;
+
+  if (icd_scan_listener_exist(module))
+    icd_scan_network(module, NULL);
+  else
+    ILOG_INFO("module '%s' has no listeners, scan not restarted", module->name);
+
+  return FALSE;
+}

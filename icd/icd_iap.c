@@ -794,3 +794,81 @@ struct icd_iap *
 {
   return g_new0(struct icd_iap, 1);
 }
+
+struct icd_iap *
+icd_iap_find_by_id(const gchar *iap_id, const gboolean is_local)
+{
+  GSList *l;
+
+  for (l = icd_context_get()->request_list; l; l = l->next)
+  {
+    struct icd_request *request = (struct icd_request *)l->data;
+
+    if (request)
+    {
+      if (request->try_iaps)
+      {
+        if (request->try_iaps->data)
+        {
+            struct icd_iap *iap = (struct icd_iap *)request->try_iaps->data;
+
+          if (string_equal(iap_id, iap->id) && iap->id_is_local == is_local)
+          {
+            ILOG_DEBUG("IAP for %s and local %s found", iap_id,
+                       is_local ? "TRUE" : "FALSE");
+            return iap;
+          }
+        }
+        else
+          ILOG_ERR("request %p contains NULL iap", request);
+      }
+      else
+        ILOG_DEBUG("request %p does not have iaps", request);
+    }
+    else
+      ILOG_ERR("request in request list is NULL");
+  }
+
+  return NULL;
+}
+
+static void
+icd_iap_save_cb(gboolean success, gpointer user_data)
+{
+  struct icd_iap *iap = (struct icd_iap *)user_data;
+
+  iap->save_dlg = NULL;
+
+  if (success)
+    ILOG_DEBUG("save connection dialog successfully requested, waiting...");
+  else
+  {
+    ILOG_WARN("save connection dialog not ok, continue without saving");
+    icd_iap_has_connected(iap);
+  }
+}
+
+static void
+icd_iap_post_up_script_done(const pid_t pid, const gint exit_value,
+                            gpointer user_data)
+{
+  struct icd_iap *iap = (struct icd_iap *)user_data;
+
+  iap->script_pids = g_slist_remove(iap->script_pids, GINT_TO_POINTER(pid));
+
+  if (iap->script_pids)
+    ILOG_INFO("still more post-up scripts to come, waiting");
+  else
+  {
+    ILOG_INFO("all post-up scripts done, iap can be connected");
+
+    if (!iap->id_is_local && icd_gconf_is_temporary(iap->id))
+    {
+      iap->state = ICD_IAP_STATE_SAVING;
+      iap->save_dlg = icd_osso_ui_send_save(iap->connection.network_id,
+                                            icd_iap_save_cb, iap);
+    }
+    else
+      icd_iap_has_connected(iap);
+  }
+}

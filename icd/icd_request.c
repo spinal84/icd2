@@ -751,3 +751,29 @@ disconnected:
     icd_iap_disconnect(iap_blocking, NULL);
   }
 }
+
+struct icd_request *
+icd_request_find_by_iap_id(const gchar *iap_id, const gboolean is_local)
+{
+  struct icd_iap *iap;
+
+  if (iap_id && (iap = icd_iap_find_by_id(iap_id, is_local)))
+    return (struct icd_request *)iap->connection.request_token;
+
+  return NULL;
+}
+
+struct icd_request *
+    icd_request_find_by_iap(const gchar *network_type,
+                            const guint network_attrs, const gchar *network_id)
+{
+  struct icd_iap *iap;
+
+  if (network_id &&
+      (iap = icd_iap_find(network_type, network_attrs, network_id)))
+  {
+    return (struct icd_request *)iap->connection.request_token;
+  }
+
+  return NULL;
+}

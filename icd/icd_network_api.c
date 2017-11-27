@@ -333,3 +333,29 @@ icd_network_api_renew(enum icd_nw_layer renew_layer, const gchar *network_type,
   ILOG_DEBUG("in state %s, no need to renew anything",
              icd_iap_state_names[iap->state]);
 }
+
+gboolean
+icd_network_api_has_type(struct icd_network_module *module, const gchar *type)
+{
+  struct icd_context *icd_ctx;
+  GSList *l;
+
+  if (!type || !module)
+    return FALSE;
+
+  icd_ctx = icd_context_get();
+
+  for (l = (GSList *)g_hash_table_lookup(icd_ctx->type_to_module, type); l;
+       l = l->next)
+  {
+    if (l->data)
+    {
+      if (l->data == module)
+        return TRUE;
+    }
+    else
+      ILOG_CRIT("Module list has NULL type");
+  }
+
+  return FALSE;
+}

@@ -15,6 +15,9 @@
 #include "icd_name_owner.h"
 #include "icd_network_priority.h"
 
+static void icd_request_try_iap_cb(enum icd_iap_status status,
+                                   struct icd_iap *iap, gpointer user_data);
+
 /** ICd request status names */
 static const gchar *icd_request_status_names[ICD_REQUEST_MAX] = {
   "ICD_REQUEST_POLICY_PENDING",
@@ -365,7 +368,7 @@ icd_request_make_check_duplicate(struct icd_request *request,
 
   return request;
 }
-#if 0
+
 static gboolean
 icd_request_try_iap(struct icd_request *request)
 {
@@ -394,7 +397,7 @@ icd_request_try_iap(struct icd_request *request)
 
   return FALSE;
 }
-#endif
+
 static void
 icd_request_connect(struct icd_request *request)
 {
@@ -558,4 +561,193 @@ icd_request_send_ack(struct icd_request *request, struct icd_iap *iap)
     icd_dbus_api_send_nack(request->users, iap);
   else
     icd_dbus_api_send_ack(request->users, iap);
+}
+
+static gboolean
+icd_request_find_iap_by_module(struct icd_iap *iap, gpointer user_data)
+{
+  GSList *l;
+
+  if (!iap || !user_data)
+    return TRUE;
+
+  for (l = iap->network_modules; l; l = l->next)
+  {
+    if (l->data == user_data)
+    {
+      ILOG_DEBUG("request found matching module %p for iap %p", l->data, iap);
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static gpointer
+icd_request_find_changeto(struct icd_request *request, gpointer user_data)
+{
+  if (request->state == ICD_REQUEST_CHANGETO)
+    return request;
+
+  return NULL;
+}
+
+static void
+icd_request_retry_cb(gboolean success, gpointer user_data)
+{
+  if (success)
+    ILOG_DEBUG("request dialog successfully requested");
+  else
+  {
+    ILOG_WARN("retry dialog requested from UI returned error");
+    icd_request_update_status(ICD_REQUEST_DISCONNECTED,
+                              (struct icd_request *)user_data);
+    icd_request_send_nack((struct icd_request *)user_data);
+    icd_request_free_iaps((struct icd_request *)user_data);
+    icd_request_free((struct icd_request *)user_data);
+  }
+}
+
+static void
+icd_request_try_iap_cb(enum icd_iap_status status, struct icd_iap *iap,
+                       gpointer user_data)
+{
+  struct icd_request *request = (struct icd_request *)user_data;
+  struct icd_context *icd_ctx = icd_context_get();
+  gboolean success;
+  struct icd_iap *iap_blocking;
+
+  request->try_iaps = g_slist_remove(request->try_iaps, iap);
+
+  if (status == ICD_IAP_DISCONNECTED)
+  {
+    struct icd_request *req;
+
+    icd_request_update_status(ICD_REQUEST_DISCONNECTED, request);
+    icd_request_send_ack(request, iap);
+    icd_request_tracking_info_free(request);
+    icd_policy_api_iap_disconnected(&iap->connection, iap->err_str);
+    icd_status_disconnected(iap, 0, iap->err_str);
+    icd_request_free_iaps(request);
+    icd_iap_free(iap);
+    icd_request_free(request);
+
+    req = (struct icd_request *)icd_request_foreach(icd_request_find_changeto,
+                                                    NULL);
+    if (req)
+    {
+      ILOG_INFO("request %p was blocked, connecting it", req);
+      icd_request_connect(req);
+    }
+    else
+      ILOG_INFO("no other requests blocked");
+  }
+  else
+  {
+    if (status == ICD_IAP_DISCONNECTED || status == ICD_IAP_CREATED)
+    {
+      icd_request_free_iaps(request);
+      request->try_iaps = g_slist_prepend(NULL, iap);
+      icd_request_update_status(ICD_REQUEST_SUCCEEDED, request);
+      icd_request_send_ack(request, iap);
+      icd_policy_api_iap_succeeded(&iap->connection);
+      icd_status_connected(iap, NULL, NULL);
+      return;
+    }
+
+    if (status != ICD_IAP_BUSY)
+    {
+disconnected:
+      icd_status_disconnected(iap, NULL, iap->err_str);
+
+      if (request->state == ICD_REQUEST_SUCCEEDED)
+      {
+        if (!request->try_iaps)
+          icd_request_update_status(ICD_REQUEST_DISCONNECTED, request);
+
+        success = TRUE;
+      }
+      else
+        success = FALSE;
+
+      icd_policy_api_iap_disconnected(&iap->connection, iap->err_str);
+
+      if (icd_ctx->shutting_down)
+        ILOG_INFO("request %p disconnected, icd2 shutting down", request);
+      else
+      {
+        if (icd_request_try_iap(request))
+        {
+          icd_iap_free(iap);
+          return;
+        }
+
+        if (!success &&
+            !(request->req.attrs & ICD_POLICY_ATTRIBUTE_NO_INTERACTION) &&
+            !iap->user_interaction_done)
+        {
+          if (request->multi_iaps)
+          {
+            struct icd_request *req;
+
+            ILOG_DEBUG("No more IAPs to try, requesting user to choose since tried more than one IAP already");
+            icd_iap_free(iap);
+            req = icd_request_new(ICD_POLICY_ATTRIBUTE_NO_INTERACTION |
+                                  ICD_POLICY_ATTRIBUTE_BACKGROUND,
+                                  NULL, 0, NULL, NULL, 0, "[ASK]");
+            icd_request_merge(request, req);
+            icd_request_make(req);
+          }
+          else
+          {
+            gchar *err_str;
+            gchar *id;
+
+            ILOG_DEBUG("No more IAPs to try, request retry from user");
+            request->try_iaps = g_slist_prepend(request->try_iaps, iap);
+            icd_request_update_status(ICD_REQUEST_WAITING, request);
+
+            err_str = iap->err_str;
+
+            if (!err_str)
+              err_str = ICD_DBUS_ERROR_IAP_NOT_AVAILABLE;
+
+            if (!iap->id || !iap->id_is_local)
+              id = iap->connection.network_id;
+            else
+              id = iap->id;
+
+            icd_osso_ui_send_retry(id, err_str, icd_request_retry_cb, request);
+          }
+
+          return;
+        }
+
+        ILOG_DEBUG("No more IAPs to try, removing request since %s",
+                   !success || iap->user_interaction_done ?
+                     "no prompting" : "already connected");
+      }
+
+      icd_request_update_status(ICD_REQUEST_DISCONNECTED, request);
+      icd_request_send_nack(request);
+      icd_request_free_iaps(request);
+      icd_request_free(request);
+      icd_iap_free(iap);
+      return;
+    }
+
+    icd_request_update_status(ICD_REQUEST_CHANGETO, request);
+    iap_blocking = icd_iap_foreach(icd_request_find_iap_by_module, iap->busy);
+
+    if (!iap_blocking)
+    {
+      ILOG_WARN("request %p got ICD_IAP_BUSY for iap %p but no blocking iap",
+          request, iap);
+      goto disconnected;
+    }
+
+    ILOG_INFO("request %p waiting for iap %p to close", request, iap_blocking);
+    request->try_iaps = g_slist_prepend(request->try_iaps, iap);
+    icd_iap_disconnect(iap_blocking, NULL);
+  }
 }

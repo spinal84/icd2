@@ -788,3 +788,9 @@ icd_iap_connect(struct icd_iap *iap, icd_iap_request_cb_fn request_cb,
     icd_iap_do_callback(ICD_IAP_FAILED, iap);
   }
 }
+
+struct icd_iap *
+    icd_iap_new(void)
+{
+  return g_new0(struct icd_iap, 1);
+}

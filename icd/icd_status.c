@@ -125,3 +125,19 @@ icd_status_connected(struct icd_iap *iap, const gchar *dbus_destination,
                          dbus_destination, err_str);
   icd_dbus_api_update_state(iap, dbus_destination, ICD_STATE_CONNECTED);
 }
+
+void
+icd_status_disconnected(struct icd_iap *iap, const gchar *dbus_destination,
+                        const gchar *err_str)
+{
+  gchar *id;
+
+  if (!iap->id || iap->id_is_local)
+    id = iap->connection.network_id;
+  else
+    id = iap->id;
+
+  icd_status_send_signal(iap->connection.network_type, id, "IDLE",
+                         dbus_destination, err_str);
+  icd_dbus_api_update_state(iap, dbus_destination, ICD_STATE_DISCONNECTED);
+}

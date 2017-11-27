@@ -19,6 +19,30 @@ struct icd_dbus_api_addrinfo_data {
   guint called;
 };
 
+/** structure for statistics gathering */
+struct icd_dbus_api_statistics_data {
+  /** D-Bus sender */
+  gchar *sender;
+
+  /** Time active */
+  guint time_active;
+
+  /** Signal strength */
+  gint signal;
+
+  /** Station id, e.g. MAC address */
+  gchar *station_id;
+
+  /** Raw dB value */
+  gint dB;
+
+  /** Bytes received */
+  guint rx_bytes;
+
+  /** Bytes sent */
+  guint tx_bytes;
+};
+
 /** ICd2 D-Bus API data structure */
 struct icd_dbus_api_listeners {
   /** dbus apps receiving scan results */
@@ -321,7 +345,61 @@ icd_dbus_api_addrinfo_req(DBusConnection *conn, DBusMessage *msg,
 
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
+#if 0
+static gboolean
+icd_dbus_api_statistics_send(struct icd_iap *iap,
+                             struct icd_dbus_api_foreach_data *foreach_data)
+{
+  struct icd_dbus_api_statistics_data *statistics_data;
 
+  if (!iap)
+  {
+    ILOG_ERR("dbus api got NULL iap in statistics request");
+    return FALSE;
+  }
+
+  statistics_data = g_new0(struct icd_dbus_api_statistics_data, 1);
+  statistics_data->sender = g_strdup(foreach_data->sender);
+  icd_iap_get_link_stats(iap, icd_dbus_api_statistics_link_cb, statistics_data);
+
+  return TRUE;
+}
+
+static DBusHandlerResult
+icd_dbus_api_statistics_req(DBusConnection *conn, DBusMessage *msg,
+                            void *user_data)
+{
+  DBusMessage *message;
+  struct icd_dbus_api_foreach_data foreach_data;
+
+  message = dbus_message_new_method_return(msg);
+
+  if (message)
+  {
+    foreach_data.connections = 0;
+    foreach_data.send_fn = icd_dbus_api_statistics_send;
+    foreach_data.sender = dbus_message_get_sender(msg);
+    icd_dbus_api_foreach_iap_req(msg, &foreach_data);
+
+    if (dbus_message_append_args(message,
+                                  DBUS_TYPE_UINT32, &foreach_data.connections,
+                                  DBUS_TYPE_INVALID))
+    {
+      icd_dbus_send_system_msg(message);
+      dbus_message_unref(message);
+      return DBUS_HANDLER_RESULT_HANDLED;
+    }
+
+    dbus_message_unref(message);
+
+    ILOG_ERR("dbus_api could not add args to mcall return");
+  }
+  else
+    ILOG_ERR("dbus api cannot create state req mcall return");
+
+  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+}
+#endif
 /** method calls provided */
 static const struct icd_dbus_mcall_table icd_dbus_api_mcalls[] = {
  /*{ICD_DBUS_API_SCAN_REQ, "u", "as", icd_dbus_api_scan_req},
@@ -974,6 +1052,23 @@ icd_dbus_api_send_nack(GSList *tracklist, struct icd_iap *iap)
       g_free(track->sender);
       g_free(track);
       l->data = NULL;
+    }
+  }
+}
+
+void
+icd_dbus_api_send_ack(GSList *tracklist, struct icd_iap *iap)
+{
+  GSList *l;
+
+  for (l = tracklist; l; l = l->next)
+  {
+    struct icd_tracking_info *track = (struct icd_tracking_info *)l->data;
+
+    if (track && track->interface == ICD_TRACKING_INFO_ICD2)
+    {
+      icd_dbus_api_send_connect_sig(ICD_CONNECTION_SUCCESSFUL, track->sender,
+                                    iap);
     }
   }
 }

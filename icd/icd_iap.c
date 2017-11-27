@@ -435,7 +435,6 @@ icd_iap_disconnect(struct icd_iap *iap, const gchar *err_str)
             iap->script_pids = g_slist_prepend(iap->script_pids,
                                                (gpointer)(intptr_t)pid);
           }
-
         }
       }
       else

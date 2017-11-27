@@ -26,15 +26,35 @@ enum icd_policy_status {
 
 #define ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE      0x40
 
+/** The requested (pseudo)network that is to be decided on by the policy
+ * function.
+ */
 struct icd_policy_request {
+  /** internal information */
   gpointer request_token;
+
+  /** attributes for this request */
   guint attrs;
+
+  /** service provider type */
   gchar *service_type;
+
+  /** service provider attributes */
   guint service_attrs;
+
+  /** service provider id */
   gchar *service_id;
+
+  /** (pseudo)network type */
   gchar *network_type;
+
+  /** (pseudo)network attributes */
   guint network_attrs;
+
+  /** (pseudo)network id */
   gchar *network_id;
+
+  /** network priority */
   gint network_priority;
 };
 

@@ -84,3 +84,38 @@ icd_network_priority_pref_init (void)
   ILOG_DEBUG("preferred srv type '%s', srv id '%s'", preferred_type,
              preferred_id);
 }
+
+gint
+icd_network_priority_get(const gchar *srv_type, const gchar *srv_id,
+                         const gchar *network_type, const guint network_attrs)
+{
+  guint priority = 0;
+
+  if (preferred_id && preferred_type && srv_type && srv_id &&
+      !strcmp(preferred_type, srv_type) && !strcmp(preferred_id, srv_id))
+  {
+    return ICD_NW_PRIO_SRV_PREF;
+  }
+
+  if (network_attrs & ICD_NW_ATTR_IAPNAME)
+    priority = ICD_NW_PRIO_SAVED_BOOSTER_VALUE;
+
+  if (!strncmp(network_type, ICD_NW_TYPE_WLAN, strlen(ICD_NW_TYPE_WLAN)))
+    priority += ICD_NW_PRIO_WLAN;
+  else if (!strcmp(network_type, ICD_NW_TYPE_WIMAX))
+    priority += ICD_NW_PRIO_WIMAX;
+  else if (!strcmp(network_type, ICD_NW_TYPE_DUN_GSM_PS) ||
+           !strcmp(network_type, ICD_NW_TYPE_DUN_CDMA_PSD))
+  {
+    priority += ICD_NW_PRIO_DUN_PS;
+  }
+  else if (!strcmp(network_type, ICD_NW_TYPE_DUN_GSM_CS) ||
+           !strcmp(network_type, ICD_NW_TYPE_DUN_CDMA_CSD))
+  {
+    priority += ICD_NW_PRIO_DUN_CS;
+  }
+  else if (!strcmp(network_type, ICD_NW_TYPE_DUN_CDMA_QNC))
+    priority += ICD_NW_PRIO_DUN_CS;
+
+  return priority;
+}

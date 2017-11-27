@@ -433,3 +433,66 @@ icd_policy_api_iap_connect(struct icd_policy_request *connection)
 {
   return icd_policy_api_run(icd_policy_api_iap_connect_iter, connection, NULL);
 }
+
+static void
+icd_policy_api_add_iap(struct icd_policy_request *req, gchar *service_type,
+                       guint service_attrs, gchar *service_id,
+                       gchar *network_type, guint network_attrs,
+                       gchar *network_id, gint network_priority)
+{
+  icd_request_add_iap((struct icd_request *)req->request_token, service_type,
+                      service_attrs, service_id, network_type, network_attrs,
+                      network_id, network_priority);
+}
+
+static enum icd_policy_status
+icd_policy_api_iap_disconnected_iter(struct icd_policy_module *module,
+                                     struct icd_policy_request *request,
+                                     gpointer user_data)
+{
+  GSList *l;
+
+  if (module->policy.disconnected)
+  {
+    ILOG_INFO("running module '%s' disconnected policy", module->name);
+
+    l = icd_policy_api_existing_conn_get();
+    module->policy.disconnected(request, (const gchar *)user_data, l,
+                                &module->policy.private);
+    g_slist_free(l);
+  }
+
+  return ICD_POLICY_ACCEPTED;
+}
+
+void
+icd_policy_api_iap_disconnected(struct icd_policy_request *connection,
+                                const gchar *err_str)
+{
+  icd_policy_api_run(icd_policy_api_iap_disconnected_iter, connection,
+                     (gpointer)err_str);
+}
+
+static enum icd_policy_status
+icd_policy_api_iap_succeeded_iter(struct icd_policy_module *module,
+                                  struct icd_policy_request *request,
+                                  gpointer user_data)
+{
+  GSList *l;
+
+  if (module->policy.connected)
+  {
+    ILOG_INFO("running module '%s' connected policy", module->name);
+    l = icd_policy_api_existing_conn_get();
+    module->policy.connected(request, l, &module->policy.private);
+    g_slist_free(l);
+  }
+
+  return ICD_POLICY_ACCEPTED;
+}
+
+void
+icd_policy_api_iap_succeeded(struct icd_policy_request *connection)
+{
+  icd_policy_api_run(icd_policy_api_iap_succeeded_iter, connection, NULL);
+}

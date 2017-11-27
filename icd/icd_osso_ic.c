@@ -691,3 +691,50 @@ icd_osso_ui_send_retry(const gchar *iap_name, const gchar *error,
 
   g_free(mcall_data);
 }
+
+void
+icd_osso_ic_send_ack(GSList *tracking_list, const gchar *iap_name)
+{
+  GSList *l;
+
+  if (!iap_name)
+  {
+    ILOG_CRIT("no iap name when sending ack");
+    return;
+  }
+
+  for (l = tracking_list; l; l = l->next)
+  {
+    struct icd_tracking_info *track = (struct icd_tracking_info *)l->data;
+    DBusMessage *msg;
+
+    if (!track->request || track->interface)
+      continue;
+
+    msg = dbus_message_new_method_return(track->request);
+
+    if (msg)
+    {
+      if (dbus_message_append_args(msg, DBUS_TYPE_STRING, &iap_name, 0))
+      {
+        ILOG_INFO("Sending ack for iap '%s' to '%s'", iap_name, track->sender);
+
+        icd_dbus_send_system_msg(msg);
+        dbus_message_unref(track->request);
+        track->request = NULL;
+      }
+      else
+      {
+        ILOG_CRIT("failed to append arg to ack for '%s' request %p",
+                  track->sender, track->request);
+      }
+
+      dbus_message_unref(msg);
+    }
+    else
+    {
+      ILOG_CRIT("failed to create ack for '%s' for request %p", track->sender,
+                track->request);
+    }
+  }
+}

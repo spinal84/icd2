@@ -365,7 +365,36 @@ icd_request_make_check_duplicate(struct icd_request *request,
 
   return request;
 }
+#if 0
+static gboolean
+icd_request_try_iap(struct icd_request *request)
+{
+  struct icd_iap *iap;
 
+  while (request->try_iaps)
+  {
+    icd_request_update_status(ICD_REQUEST_CONNECTING_IAPS, request);
+    iap = (struct icd_iap *)request->try_iaps->data;
+
+    ILOG_DEBUG("Trying IAP %p", iap);
+
+    if (iap &&
+        icd_policy_api_iap_connect(&iap->connection) == ICD_POLICY_ACCEPTED)
+    {
+      icd_status_connect(iap, NULL, NULL);
+      icd_iap_connect((struct icd_iap *)request->try_iaps->data,
+                      icd_request_try_iap_cb, request);
+      return TRUE;
+    }
+
+    ILOG_INFO("connect policy refused to connect iap %p", iap);
+    request->try_iaps = g_slist_remove(request->try_iaps, iap);
+    icd_iap_free(iap);
+  }
+
+  return FALSE;
+}
+#endif
 static void
 icd_request_connect(struct icd_request *request)
 {
@@ -466,4 +495,67 @@ icd_request_tracking_info_free(struct icd_request *request)
 
   g_slist_free(request->users);
   request->users = NULL;
+}
+
+void
+icd_request_add_iap(struct icd_request *request, gchar *service_type,
+                    guint service_attrs, gchar *service_id, gchar *network_type,
+                    guint network_attrs, gchar *network_id,
+                    gint network_priority)
+{
+  guint attrs = 0;
+  struct icd_iap *iap = icd_iap_new();
+
+  request->req.attrs |= ICD_POLICY_ATTRIBUTE_HAS_CONNECTIONS;
+
+  iap->connection.request_token = request;
+  iap->connection.service_attrs = service_attrs;
+  iap->connection.service_type = g_strdup(service_type);
+  iap->connection.service_id = g_strdup(service_id);
+  iap->connection.network_type = g_strdup(network_type);
+  iap->connection.network_id = g_strdup(network_id);
+
+  if (request->req.attrs & ICD_POLICY_ATTRIBUTE_NO_INTERACTION)
+    attrs = ICD_NW_ATTR_SILENT;
+
+  if (request->req.attrs & ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE)
+    attrs |= ICD_NW_ATTR_ALWAYS_ONLINE;
+
+  iap->connection.network_attrs = attrs | network_attrs;
+
+  if (network_priority != -1)
+    iap->connection.network_priority = network_priority;
+  else
+  {
+    iap->connection.network_priority =
+        icd_network_priority_get(iap->connection.service_type,
+                                 iap->connection.service_id,
+                                 iap->connection.network_type,
+                                 iap->connection.network_attrs);
+  }
+
+  icd_iap_id_create(iap, 0);
+
+
+  ILOG_DEBUG("adding IAP %s/%0x/%s,%s/%0x/%s to request %p",
+             iap->connection.service_type,
+             iap->connection.service_attrs,
+             iap->connection.service_id,
+             iap->connection.network_type,
+             iap->connection.network_attrs,
+             iap->connection.network_id,
+             request);
+
+  request->try_iaps = g_slist_append(request->try_iaps, iap);
+}
+
+void
+icd_request_send_ack(struct icd_request *request, struct icd_iap *iap)
+{
+  icd_osso_ic_send_ack(request->users, iap->connection.network_id);
+
+  if (request->state == ICD_REQUEST_DISCONNECTED)
+    icd_dbus_api_send_nack(request->users, iap);
+  else
+    icd_dbus_api_send_ack(request->users, iap);
 }

@@ -777,3 +777,115 @@ struct icd_request *
 
   return NULL;
 }
+
+void
+icd_request_tracking_info_remove(struct icd_request *request,
+                                 struct icd_tracking_info *track)
+{
+  if (request && track)
+    request->users = g_slist_remove_all(request->users, track);
+}
+
+gboolean
+icd_request_merge(struct icd_request *merge_request,
+                  struct icd_request *existing)
+{
+  GSList *l;
+
+  if (merge_request == existing)
+  {
+    ILOG_CRIT("cannot merge request %p with itself %p", merge_request, merge_request);
+    return FALSE;
+  }
+
+  if (merge_request->state > ICD_REQUEST_WAITING )
+  {
+    if (merge_request->state == ICD_REQUEST_CONNECTING_IAPS &&
+        !merge_request->try_iaps)
+    {
+      goto skip;
+    }
+
+    ILOG_CRIT("Attempted to merge request %p with %p while in state %s with %sIAPs",
+              merge_request, existing,
+              icd_request_status_names[merge_request->state],
+              merge_request->try_iaps ? "" : "no ");
+    return FALSE;
+  }
+
+  if (merge_request->try_iaps )
+  {
+    ILOG_WARN("Request %p to merge has IAPs in ICD_REQUEST_POLICY_PENDING_STATE, freeing them. Check policy module order",
+              merge_request);
+    icd_request_free_iaps(merge_request);
+  }
+
+skip:
+  l = merge_request->users;
+
+  while (l)
+  {
+    struct icd_tracking_info * track = (struct icd_tracking_info *)l->data;
+    GSList *next = l->next;
+
+    if (!track)
+    {
+      ILOG_ERR("users list item NULL for request %p", merge_request);
+      merge_request->users = g_slist_delete_link(merge_request->users, l);
+    }
+    else
+    {
+      if (existing->state == ICD_REQUEST_SUCCEEDED)
+      {
+        struct icd_tracking_info *merge_track;
+
+        ILOG_DEBUG("copying user '%s' from %p to %p for reference counting purposes",
+                   track->sender, merge_request, existing);
+        merge_track = icd_tracking_info_new(track->interface, track->sender,
+                                            NULL);
+        icd_request_tracking_info_add(existing, merge_track);
+      }
+      else
+      {
+        ILOG_DEBUG("copying user '%s' and request %p from %p to %p",
+                   track->sender, track->request, merge_request, existing);
+        icd_request_tracking_info_remove(merge_request, track);
+        icd_request_tracking_info_add(existing, track);
+      }
+    }
+
+    l = next;
+  }
+
+  existing->req.attrs =
+      (merge_request->req.attrs | (existing->req.attrs & (ICD_POLICY_ATTRIBUTE_CONN_UI |
+                                                          ICD_POLICY_ATTRIBUTE_CONNECTIONS_FAILED |
+                                                          ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE_CHANGE))) |
+      (existing->req.attrs & (merge_request->req.attrs & (ICD_POLICY_ATTRIBUTE_NO_INTERACTION |
+                                                          ICD_POLICY_ATTRIBUTE_BACKGROUND))) |
+       (existing->req.attrs & ICD_POLICY_ATTRIBUTE_HAS_CONNECTIONS);
+  icd_policy_api_request_cancel(&merge_request->req);
+  icd_request_update_status(ICD_REQUEST_MERGED, merge_request);
+  ILOG_DEBUG("Request %p, attrs %0x merged with %p, resulting attrs %0x",
+             merge_request, merge_request->req.attrs, existing,
+             existing->req.attrs);
+
+  if (existing->state == ICD_REQUEST_SUCCEEDED)
+  {
+    if (existing->try_iaps && existing->try_iaps->data)
+    {
+      icd_request_send_ack(merge_request,
+                           (struct icd_iap *)existing->try_iaps->data);
+      icd_request_tracking_info_free(merge_request);
+    }
+    else
+    {
+      ILOG_CRIT("existing ICD_REQUEST_SUCCEEDED request %p has no connection",
+                existing);
+    }
+  }
+
+  icd_request_free(merge_request);
+
+  return TRUE;
+}

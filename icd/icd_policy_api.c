@@ -503,3 +503,26 @@ static GSList **icd_policy_api_scan_list_get(void)
 {
   return &scan_list;
 }
+
+static enum icd_policy_status
+icd_policy_api_iap_restart_iter(struct icd_policy_module *module,
+                                struct icd_policy_request *request,
+                                gpointer user_data)
+{
+  if (module->policy.restart)
+  {
+    ILOG_INFO("running module '%s' restart policy", module->name);
+    return module->policy.restart(request, GPOINTER_TO_UINT(user_data),
+                                  &module->policy.private);
+  }
+
+  return ICD_POLICY_ACCEPTED;
+}
+
+enum icd_policy_status
+icd_policy_api_iap_restart(struct icd_policy_request *connection,
+                           guint restart_count)
+{
+  return icd_policy_api_run(icd_policy_api_iap_restart_iter, connection,
+                            GUINT_TO_POINTER(restart_count));
+}

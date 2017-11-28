@@ -20,6 +20,8 @@
 #include "icd_srv_provider.h"
 #include "icd_dbus_api.h"
 
+static gboolean icd_iap_run_restart(struct icd_iap *iap);
+
 /** names for the different states */
 const gchar *icd_iap_state_names[ICD_IAP_MAX_STATES] = {
   "ICD_IAP_STATE_DISCONNECTED",
@@ -1043,6 +1045,158 @@ icd_iap_get_link_post_stats(struct icd_iap *iap,
 
   cb(user_data, iap->connection.network_type, iap->connection.network_attrs,
      iap->connection.network_id, 0, 0, 0);
+
+  return TRUE;
+}
+
+static void
+icd_iap_post_down_script_done(const pid_t pid, const gint exit_value,
+                              gpointer user_data)
+{
+  struct icd_iap *iap = (struct icd_iap *)user_data;
+
+  iap->script_pids = g_slist_remove(iap->script_pids, GINT_TO_POINTER(pid));
+
+  if (iap->script_pids)
+    ILOG_INFO("more post-down scripts still to come, waiting");
+  else
+  {
+    switch (iap->state)
+    {
+      case ICD_IAP_STATE_IP_RESTART_SCRIPTS:
+      case ICD_IAP_STATE_LINK_PRE_RESTART_SCRIPTS:
+      case ICD_IAP_STATE_LINK_RESTART_SCRIPTS:
+        ILOG_DEBUG("iap %p in state %s post down scripts run, now run pre-up",
+                   iap, icd_iap_state_names[iap->state]);
+        icd_iap_run_pre_up_scripts(iap);
+        break;
+      case ICD_IAP_STATE_SCRIPT_POST_DOWN:
+        iap->state = ICD_IAP_STATE_DISCONNECTED;
+
+        if (!icd_iap_run_restart(iap))
+        {
+          if (iap->busy)
+          {
+            if (iap->err_str)
+            {
+              ILOG_DEBUG("iap %p being busy is not an error, clearing error string",
+                         iap);
+              g_free(iap->err_str);
+              iap->err_str = NULL;
+            }
+
+            icd_iap_do_callback(ICD_IAP_BUSY, iap);
+          }
+          else if (iap->err_str)
+          {
+            ILOG_INFO("iap disconnected, error is '%s'", iap->err_str);
+            icd_iap_do_callback(ICD_IAP_FAILED, iap);
+          }
+          else
+          {
+            ILOG_INFO("iap disconnected cleanly");
+            icd_iap_do_callback(ICD_IAP_DISCONNECTED, iap);
+          }
+        }
+        break;
+      default:
+        ILOG_ERR("iap %p in state %s when post down scripts are run, filea a bug",
+                 iap, icd_iap_state_names[iap->state]);
+        break;
+    }
+  }
+}
+
+static gboolean
+icd_iap_run_restart(struct icd_iap *iap)
+{
+  enum icd_iap_state state = iap->state;
+  enum icd_iap_state next_state;
+
+  if (state == ICD_IAP_STATE_IP_DOWN)
+  {
+    if (iap->restart_layer != ICD_NW_LAYER_IP)
+      return FALSE;
+
+    next_state = ICD_IAP_STATE_IP_UP;
+  }
+  else if (state <= ICD_IAP_STATE_IP_DOWN)
+  {
+    if (state == ICD_IAP_STATE_DISCONNECTED ||
+        iap->restart_layer != ICD_NW_LAYER_ALL)
+    {
+      return FALSE;
+    }
+
+    next_state = ICD_IAP_STATE_LINK_UP;
+  }
+  else if ( state == ICD_IAP_STATE_LINK_PRE_DOWN )
+  {
+    if (iap->restart_layer != ICD_NW_LAYER_LINK_POST)
+      return FALSE;
+
+    next_state = ICD_IAP_STATE_LINK_POST_UP;
+  }
+  else
+  {
+    if (state != ICD_IAP_STATE_LINK_DOWN ||
+        iap->restart_layer != ICD_NW_LAYER_LINK)
+    {
+      return FALSE;
+    }
+
+    next_state = ICD_IAP_STATE_LINK_UP;
+  }
+
+  iap->restart_count++;
+
+  if (icd_policy_api_iap_restart(&iap->connection, iap->restart_count) ==
+      ICD_POLICY_REJECTED)
+  {
+    ILOG_ERR("ICD_NW_RESTART requested %d times for iap %p, restart limit exceed",
+             iap->restart_count, iap);
+
+    if (iap->state == ICD_IAP_STATE_DISCONNECTED)
+    {
+      icd_iap_do_callback(ICD_IAP_FAILED, iap);
+      return TRUE;
+    }
+
+    ILOG_DEBUG("iap %p is going to continue disconnecting", iap);
+
+    return FALSE;
+  }
+
+  if ( icd_log_get_level() == ICD_DEBUG )
+    ILOG_DEBUG("restart for layer %s was requested, iap %p starting to (re)connect in state %s, next state %s",
+               icd_iap_layer_names[iap->restart_layer], iap,
+               icd_iap_state_names[iap->state],
+               icd_iap_state_names[next_state]);
+
+  if (iap->err_str)
+  {
+    ILOG_DEBUG("iap %p being restarted is not an error, clearing error string",
+               iap);
+
+    g_free(iap->err_str);
+    iap->err_str = NULL;
+  }
+
+  iap->restart_layer = ICD_NW_LAYER_NONE;
+  iap->restart_state = ICD_IAP_STATE_DISCONNECTED;
+  iap->state = next_state;
+
+  if (next_state == ICD_IAP_STATE_LINK_PRE_RESTART_SCRIPTS ||
+      next_state == ICD_IAP_STATE_LINK_RESTART_SCRIPTS ||
+      next_state == ICD_IAP_STATE_IP_RESTART_SCRIPTS )
+  {
+    icd_iap_run_post_down_scripts(iap);
+  }
+  else
+  {
+    icd_iap_modules_reset(iap);
+    icd_iap_module_next(iap);
+  }
 
   return TRUE;
 }

@@ -345,7 +345,192 @@ icd_dbus_api_addrinfo_req(DBusConnection *conn, DBusMessage *msg,
 
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
-#if 0
+
+static void
+icd_dbus_api_statistics_data_free(struct icd_dbus_api_statistics_data *stats)
+{
+  g_free(stats->sender);
+  g_free(stats->station_id);
+  g_free(stats);
+}
+
+static void
+icd_dbus_api_statistics_ip_cb(const gpointer ip_stats_cb_token,
+                              const gchar *network_type,
+                              const guint network_attrs,
+                              const gchar *network_id, guint time_active,
+                              guint rx_bytes, guint tx_bytes)
+{
+  struct icd_dbus_api_statistics_data *stats =
+      (struct icd_dbus_api_statistics_data *)ip_stats_cb_token;
+  struct icd_iap *iap = icd_iap_find(network_type, network_attrs, network_id);
+  DBusMessage *msg;
+  char *net_id;
+  char *empty = "";
+
+#define PVAL(v) ((v) ? &(v) : &(empty))
+
+  if (!iap)
+  {
+    ILOG_WARN("dbus api ip cb stats cannot find iap %s/%0x/%s anymore, but that's ok",
+              network_type, network_attrs, network_id);
+
+    if (stats)
+      icd_dbus_api_statistics_data_free(stats);
+
+    return;
+  }
+
+  if (stats)
+  {
+    if (time_active)
+      stats->time_active = time_active;
+
+    if (tx_bytes || rx_bytes)
+    {
+      stats->rx_bytes = rx_bytes;
+      stats->tx_bytes = tx_bytes;
+    }
+
+    if (iap->connection.network_id)
+      net_id = iap->connection.network_id;
+    else
+      net_id = empty;
+
+    msg = dbus_message_new_signal(ICD_DBUS_API_PATH,
+                                  ICD_DBUS_API_INTERFACE,
+                                  ICD_DBUS_API_STATISTICS_SIG);
+
+    if (msg &&
+        dbus_message_append_args(
+          msg,
+          DBUS_TYPE_STRING, PVAL(iap->connection.service_type),
+          DBUS_TYPE_UINT32, &iap->connection.service_attrs,
+          DBUS_TYPE_STRING, PVAL(iap->connection.service_id),
+          DBUS_TYPE_STRING, PVAL(iap->connection.network_type),
+          DBUS_TYPE_UINT32, &iap->connection.network_attrs,
+          DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE, &net_id, strlen(net_id) + 1,
+          DBUS_TYPE_UINT32, &stats->time_active,
+          DBUS_TYPE_INT32, &stats->signal,
+          DBUS_TYPE_UINT32, &stats->tx_bytes,
+          DBUS_TYPE_UINT32, &stats->rx_bytes,
+          DBUS_TYPE_INVALID))
+    {
+      if (stats->sender)
+        dbus_message_set_destination(msg, stats->sender);
+
+      icd_dbus_send_system_msg(msg);
+      dbus_message_unref(msg);
+    }
+    else
+    {
+      ILOG_ERR("dbus api could not create statistics signal");
+
+      if (msg)
+        dbus_message_unref(msg);
+    }
+
+    icd_dbus_api_statistics_data_free(stats);
+  }
+  else
+    ILOG_ERR("dbus api got NULL statistics struct in ip cb");
+#undef PVAL
+}
+
+static void
+icd_dbus_api_statistics_link_post_cb(const gpointer link_post_stats_cb_token,
+                                     const gchar *network_type,
+                                     const guint network_attrs,
+                                     const gchar *network_id, guint time_active,
+                                     guint rx_bytes, guint tx_bytes)
+{
+  struct icd_dbus_api_statistics_data *stats =
+      (struct icd_dbus_api_statistics_data *)link_post_stats_cb_token;
+  struct icd_iap *iap = icd_iap_find(network_type, network_attrs, network_id);
+
+  if (!iap)
+  {
+    ILOG_WARN("dbus api link post cb stats cannot find iap %s/%0x/%s anymore, but that's ok",
+              network_type, network_attrs, network_id);
+
+    if (stats)
+      icd_dbus_api_statistics_data_free(stats);
+
+    return;
+  }
+
+  if (stats)
+  {
+    if (time_active)
+      stats->time_active = time_active;
+
+    if (rx_bytes || tx_bytes)
+    {
+      stats->rx_bytes = rx_bytes;
+      stats->tx_bytes = tx_bytes;
+    }
+
+    icd_iap_get_ip_stats(iap, icd_dbus_api_statistics_ip_cb, stats);
+    return;
+  }
+  else
+    ILOG_ERR("dbus api got NULL statistics struct in link post cb");
+}
+
+static void
+icd_dbus_api_statistics_link_cb(const gpointer link_stats_cb_token,
+                                const gchar *network_type,
+                                const guint network_attrs,
+                                const gchar *network_id,
+                                guint time_active, gint signal,
+                                gchar *station_id, gint dB, guint rx_bytes,
+                                guint tx_bytes)
+{
+  struct icd_dbus_api_statistics_data *stats =
+      (struct icd_dbus_api_statistics_data *)link_stats_cb_token;
+  struct icd_iap *iap = icd_iap_find(network_type, network_attrs, network_id);
+
+  if (!iap)
+  {
+    ILOG_WARN("dbus api link cb stats cannot find iap %s/%0x/%s anymore, but that's ok",
+              network_type, network_attrs, network_id);
+    if (stats)
+       icd_dbus_api_statistics_data_free(stats);
+
+    return;
+  }
+
+  if (stats)
+  {
+    if (time_active)
+      stats->time_active = time_active;
+
+    if (signal)
+      stats->signal = signal;
+
+    if (station_id)
+    {
+      g_free(stats->station_id);
+      stats->station_id = g_strdup(station_id);
+    }
+
+    if (dB)
+      stats->dB = dB;
+
+    if (rx_bytes || tx_bytes)
+    {
+      stats->rx_bytes = rx_bytes;
+      stats->tx_bytes = tx_bytes;
+    }
+
+    icd_iap_get_link_post_stats(iap, icd_dbus_api_statistics_link_post_cb,
+                                stats);
+    return;
+  }
+  else
+    ILOG_ERR("dbus api got NULL statistics struct in link cb");
+}
+
 static gboolean
 icd_dbus_api_statistics_send(struct icd_iap *iap,
                              struct icd_dbus_api_foreach_data *foreach_data)
@@ -399,7 +584,7 @@ icd_dbus_api_statistics_req(DBusConnection *conn, DBusMessage *msg,
 
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
-#endif
+
 /** method calls provided */
 static const struct icd_dbus_mcall_table icd_dbus_api_mcalls[] = {
  /*{ICD_DBUS_API_SCAN_REQ, "u", "as", icd_dbus_api_scan_req},
@@ -411,9 +596,9 @@ static const struct icd_dbus_mcall_table icd_dbus_api_mcalls[] = {
  {ICD_DBUS_API_DISCONNECT_REQ, "usussuay", "", icd_dbus_api_disconnect_req},
  {ICD_DBUS_API_DISCONNECT_REQ, "u", "", icd_dbus_api_disconnect_req},
  {ICD_DBUS_API_STATE_REQ, "sussuay", "u", icd_dbus_api_state_req},
- {ICD_DBUS_API_STATE_REQ, "", "u", icd_dbus_api_state_req},
+ {ICD_DBUS_API_STATE_REQ, "", "u", icd_dbus_api_state_req},*/
  {ICD_DBUS_API_STATISTICS_REQ, "sussuay", "u", icd_dbus_api_statistics_req},
- {ICD_DBUS_API_STATISTICS_REQ, "", "u", icd_dbus_api_statistics_req},*/
+ {ICD_DBUS_API_STATISTICS_REQ, "", "u", icd_dbus_api_statistics_req},
  {ICD_DBUS_API_ADDRINFO_REQ, "sussuay", "u", icd_dbus_api_addrinfo_req},
  {ICD_DBUS_API_ADDRINFO_REQ, "", "u", icd_dbus_api_addrinfo_req},
  {NULL}

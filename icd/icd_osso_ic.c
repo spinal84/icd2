@@ -346,6 +346,16 @@ icd_osso_ic_ipinfo_get_first(struct icd_request *request, gpointer user_data)
 }
 
 static void
+icd_osso_ic_connstats_error(DBusMessage *method_call)
+{
+  DBusMessage *msg = dbus_message_new_error(method_call,
+                                            ICD_DBUS_ERROR_IAP_NOT_AVAILABLE,
+                                            "IAP does not exist anymore");
+
+  icd_dbus_send_system_msg(msg);
+  dbus_message_unref(msg);
+}
+static void
 icd_osso_ic_ipinfo_cb(gpointer addr_info_cb_token, const gchar *network_type,
                       const guint network_attrs, const gchar *network_id,
                       gchar *ip_address, gchar *ip_netmask, gchar *ip_gateway,

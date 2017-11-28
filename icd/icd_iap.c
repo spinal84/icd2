@@ -918,3 +918,131 @@ icd_iap_get_ipinfo(struct icd_iap *iap, icd_nw_ip_addr_info_cb_fn cb,
 
   return rv;
 }
+
+gboolean
+icd_iap_get_ip_stats(struct icd_iap *iap, icd_nw_ip_stats_cb_fn cb,
+                     gpointer user_data)
+{
+  GSList *l;
+
+  if (!cb)
+  {
+    ILOG_ERR("cb is NULL when requesting ip statistics");
+    return FALSE;
+  }
+
+  if (iap->state != ICD_IAP_STATE_CONNECTED)
+  {
+    ILOG_INFO("iap %p in state %s does not have ip info available", iap,
+              icd_iap_state_names[iap->state]);
+    return FALSE;
+  }
+
+  for (l = iap->network_modules; l; l = l->next)
+  {
+    struct icd_network_module *module = (struct icd_network_module *)l->data;
+
+    if (!module)
+      ILOG_WARN("iap %p has NULL network module", iap);
+    else if (module->nw.ip_stats)
+    {
+      ILOG_INFO("iap %p module '%s' has ip statistics", iap, module->name);
+
+      module->nw.ip_stats(iap->connection.network_type,
+                          iap->connection.network_attrs,
+                          iap->connection.network_id, &module->nw.private,
+                          cb, user_data);
+
+      return TRUE;
+    }
+  }
+
+  cb(user_data, iap->connection.network_type, iap->connection.network_attrs,
+     iap->connection.network_id, 0, 0, 0);
+
+  return TRUE;
+}
+
+gboolean
+icd_iap_get_link_stats(struct icd_iap *iap, icd_nw_link_stats_cb_fn cb,
+                       gpointer user_data)
+{
+  GSList *l;
+
+  if (!cb)
+  {
+    ILOG_ERR("cb is NULL when requesting link statistics");
+    return FALSE;
+  }
+
+  if (iap->state != ICD_IAP_STATE_CONNECTED)
+  {
+    ILOG_INFO("iap %p in state %s cannot provide statistics", iap,
+              icd_iap_state_names[iap->state]);
+    return FALSE;
+  }
+
+  for (l = iap->network_modules; l; l= l->next)
+  {
+    struct icd_network_module * module = (struct icd_network_module *)l->data;
+    if (!module)
+      ILOG_WARN("iap %p has NULL network module", iap);
+    else if (module->nw.link_stats)
+    {
+      ILOG_INFO("iap %p module '%s' has link statistics", iap, module->name);
+      module->nw.link_stats(iap->connection.network_type,
+                            iap->connection.network_attrs,
+                            iap->connection.network_id,
+                            &module->nw.private, cb, user_data);
+      return TRUE;
+    }
+  }
+
+  cb(user_data, iap->connection.network_type, iap->connection.network_attrs,
+     iap->connection.network_id, 0, 0, 0, 0, 0, 0);
+
+  return TRUE;
+}
+
+gboolean
+icd_iap_get_link_post_stats(struct icd_iap *iap,
+                            icd_nw_link_post_stats_cb_fn cb, gpointer user_data)
+{
+  GSList *l;
+
+  if (!cb)
+  {
+    ILOG_ERR("cb is NULL when requesting link post statistics");
+    return FALSE;
+  }
+
+  if (iap->state != ICD_IAP_STATE_CONNECTED)
+  {
+    ILOG_INFO("iap %p in state %s cannot provide link post stats", iap,
+              icd_iap_state_names[iap->state]);
+    return FALSE;
+  }
+
+  for (l = iap->network_modules; l; l = l->next)
+  {
+    struct icd_network_module *module = (struct icd_network_module *)l->data;
+
+    if (!module)
+      ILOG_WARN("iap %p has NULL network module", iap);
+    else if (module->nw.link_post_stats)
+    {
+      ILOG_INFO("iap %p module '%s' has link post statistics", iap,
+                module->name);
+      module->nw.link_post_stats(iap->connection.network_type,
+                                 iap->connection.network_attrs,
+                                 iap->connection.network_id,
+                                 &module->nw.private, cb, user_data);
+      return TRUE;
+    }
+  }
+
+  cb(user_data, iap->connection.network_type, iap->connection.network_attrs,
+     iap->connection.network_id, 0, 0, 0);
+
+  return TRUE;
+}

@@ -1212,6 +1212,71 @@ icd_dbus_api_state_req(DBusConnection *conn, DBusMessage *msg, void *user_data)
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
+static
+gboolean
+icd_dbus_api_send_connect_sig(enum icd_connect_status status,
+                              const gchar *sender, struct icd_iap *iap)
+{
+  guint uzero = 0;
+  gchar *empty = "";
+  gchar **service_type = &empty;
+  gchar **service_id = &empty;
+  gchar **network_type = &empty;
+  gchar *network_id = empty;
+  guint *service_attrs = &uzero;
+  guint *network_attrs = &uzero;
+  DBusMessage *msg = dbus_message_new_signal(ICD_DBUS_API_PATH,
+                                             ICD_DBUS_API_INTERFACE,
+                                             ICD_DBUS_API_CONNECT_SIG);
+  if (!msg)
+  {
+    ILOG_ERR("icd dbus out of memory when creating (n)ack signal");
+    return FALSE;
+  }
+
+  if (iap)
+  {
+    if (iap->connection.network_id)
+      network_id = iap->connection.network_id;
+
+    if (iap->connection.service_type)
+      service_type = &iap->connection.service_type;
+
+    if (iap->connection.service_id)
+      service_id = &iap->connection.service_id;
+
+    if (iap->connection.network_type)
+      network_type = &iap->connection.network_type;
+
+    network_attrs = &iap->connection.network_attrs;
+    service_attrs = &iap->connection.service_attrs;
+  }
+
+  if (!dbus_message_append_args(msg,
+                                DBUS_TYPE_STRING, service_type,
+                                DBUS_TYPE_UINT32, service_attrs,
+                                DBUS_TYPE_STRING, service_id,
+                                DBUS_TYPE_STRING, network_type,
+                                DBUS_TYPE_UINT32, network_attrs,
+                                DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE,
+                                &network_id, strlen(network_id) + 1,
+                                DBUS_TYPE_UINT32, &status,
+                                DBUS_TYPE_INVALID))
+  {
+    dbus_message_unref(msg);
+    ILOG_ERR("icd dbus could not append args to (n)ack signal");
+    return FALSE;
+  }
+
+  if (sender)
+    dbus_message_set_destination(msg, sender);
+
+  icd_dbus_send_system_msg(msg);
+  dbus_message_unref(msg);
+
+  return TRUE;
+}
+
 void
 icd_dbus_api_send_nack(GSList *tracklist, struct icd_iap *iap)
 {

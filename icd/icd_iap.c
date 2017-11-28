@@ -872,3 +872,49 @@ icd_iap_post_up_script_done(const pid_t pid, const gint exit_value,
       icd_iap_has_connected(iap);
   }
 }
+
+guint
+icd_iap_get_ipinfo(struct icd_iap *iap, icd_nw_ip_addr_info_cb_fn cb,
+                   gpointer user_data)
+{
+  guint rv = 0;
+  GSList *l;
+
+  if (!cb)
+  {
+    ILOG_ERR("iap is NULL when requesting ip info");
+    return 0;
+  }
+
+  if (iap->state != ICD_IAP_STATE_CONNECTED)
+  {
+    ILOG_INFO("iap %p in state %s does not have ip info available", iap,
+              icd_iap_state_names[iap->state]);
+    return 0;
+  }
+
+  for (l = iap->network_modules; l; l = l->next)
+  {
+    struct icd_network_module *module = (struct icd_network_module *)l->data;
+
+    if (module)
+    {
+      if (module->nw.ip_addr_info)
+      {
+        rv++;
+        ILOG_INFO("iap %p module '%s' has address info", iap, module->name);
+        module->nw.ip_addr_info(iap->connection.network_type,
+                                iap->connection.network_attrs,
+                                iap->connection.network_id, &module->nw.private,
+                                cb, user_data);
+      }
+    }
+    else
+      ILOG_WARN("iap %p has NULL network module", iap);
+  }
+
+  if (!rv)
+    ILOG_INFO("iap %p does not have any module with address info", iap);
+
+  return rv;
+}

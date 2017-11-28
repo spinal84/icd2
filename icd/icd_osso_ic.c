@@ -23,6 +23,18 @@
  */
 #define ICD_OSSO_UI_REQUEST_TIMEOUT   4 * 1000
 
+/** ip data structure */
+struct icd_osso_ic_ipdata {
+  /** how many times the callback has been called */
+  guint has_called;
+
+  /** how many times the callback will be called */
+  guint howmany;
+
+  /** D-Bus request */
+  DBusMessage *request;
+};
+
 /** connection statistics */
 struct icd_osso_ic_stats_data {
   /** method call for the statistics request */
@@ -314,14 +326,181 @@ icd_osso_ic_get_state(DBusMessage *method_call, void *user_data)
   return msg;
 }
 
+static gpointer
+icd_osso_ic_ipinfo_get_first(struct icd_request *request, gpointer user_data)
+{
+  if (request->state != ICD_REQUEST_SUCCEEDED || !request->try_iaps)
+  {
+    ILOG_DEBUG("request %p not in ICD_REQUEST_SUCCEEDED state", request);
+    return NULL;
+  }
+
+  ILOG_DEBUG("querying ip info from request %p", request);
+
+  if (request->try_iaps->data)
+    return request->try_iaps->data;
+
+  ILOG_CRIT("request %p in ICD_REQUEST_SUCCEEDED state but NULL iap", request);
+
+  return NULL;
+}
+
+static void
+icd_osso_ic_ipinfo_cb(gpointer addr_info_cb_token, const gchar *network_type,
+                      const guint network_attrs, const gchar *network_id,
+                      gchar *ip_address, gchar *ip_netmask, gchar *ip_gateway,
+                      gchar *ip_dns1, gchar *ip_dns2, gchar *ip_dns3)
+{
+  struct icd_osso_ic_ipdata *data =
+      (struct icd_osso_ic_ipdata *)addr_info_cb_token;
+
+  if (!data)
+  {
+    ILOG_ERR("ip addr info returned NULL ipdata");
+    return;
+  }
+
+  if (!data->request)
+  {
+    ILOG_DEBUG("ip info called %d time(s), reply already sent, but that's ok",
+               data->has_called + 1);
+  }
+  else
+  {
+    struct icd_iap *iap = icd_iap_find(network_type, network_attrs, network_id);
+
+    if (!iap)
+    {
+      ILOG_WARN("ip stats cannot find iap %s/%0x/%s anymore, but that's ok",
+                network_type, network_attrs, network_id);
+      icd_osso_ic_connstats_error(data->request);
+    }
+    else
+    {
+      DBusMessage *msg;
+
+      if (!ip_address)
+        ip_address = "";
+
+      if (!ip_netmask)
+        ip_netmask = "";
+
+      if (!ip_gateway)
+        ip_gateway = "";
+
+      if (!ip_dns1)
+        ip_dns1 = "";
+
+      if (!ip_dns2)
+        ip_dns2 = "";
+
+      msg = dbus_message_new_method_return(data->request);
+
+      if (msg)
+      {
+        if (dbus_message_append_args(msg,
+                                     DBUS_TYPE_STRING, &network_id,
+                                     DBUS_TYPE_STRING, &ip_address,
+                                     DBUS_TYPE_STRING, &ip_netmask,
+                                     DBUS_TYPE_STRING, &ip_gateway,
+                                     DBUS_TYPE_STRING, &ip_dns1,
+                                     DBUS_TYPE_STRING, &ip_dns2,
+                                     DBUS_TYPE_INVALID))
+        {
+          ILOG_DEBUG("Returning IP info %s/%s %s %s/%s for iap %p", ip_address,
+                     ip_netmask, ip_gateway, ip_dns1, ip_dns2, iap);
+        }
+        else
+        {
+          dbus_message_unref(msg);
+          msg = NULL;
+        }
+      }
+
+      if (!msg)
+      {
+        msg = dbus_message_new_error(
+              data->request, DBUS_ERROR_NO_MEMORY,
+              "Could not create get_ipinfo method call reply");
+      }
+
+      if (msg)
+      {
+        icd_dbus_send_system_msg(msg);
+        dbus_message_unref(msg);
+      }
+      else
+        ILOG_CRIT("Could not create get_ipinfo method call error reply");
+    }
+
+    ILOG_DEBUG("ip data called for the first time (%d)", data->has_called + 1);
+    dbus_message_unref(data->request);
+    data->request = NULL;
+  }
+
+  data->has_called++;
+
+  if (data->has_called == data->howmany)
+  {
+    ILOG_DEBUG("ip info deleted ipdata %p in callback", data);
+    g_free(data);
+  }
+}
+
+static DBusMessage *
+icd_osso_ic_ipinfo(DBusMessage *method_call, void *user_data)
+{
+  struct icd_osso_ic_ipdata *data = g_new0(struct icd_osso_ic_ipdata, 1);
+  struct icd_iap *iap =
+      (struct icd_iap *)icd_request_foreach(icd_osso_ic_ipinfo_get_first, data);
+
+  if (!iap)
+  {
+    ILOG_INFO("no ipv4 info available");
+    g_free(data);
+    return dbus_message_new_error(method_call,
+                                  ICD_DBUS_ERROR_IAP_NOT_AVAILABLE,
+                                  "No active IAP");
+  }
+
+  dbus_message_ref(method_call);
+  data->request = method_call;
+
+  ILOG_DEBUG("requesting ip info from %p", iap);
+
+  data->howmany = icd_iap_get_ipinfo(iap, icd_osso_ic_ipinfo_cb, data);
+  ILOG_DEBUG("ipinfo says %d cbs expected, has called %d", data->howmany,
+             data->has_called);
+
+  if (data->howmany == data->has_called)
+  {
+    /*
+      fmg - something's fishy there or I am too stupid to get it:
+      the same condition exists at the end of icd_osso_ic_ipinfo_cb, I hope it
+      would not lead to double-free of data struct
+     */
+    ILOG_DEBUG("ip info deleted ipdata %p", data);
+
+    if (data->request)
+    {
+      dbus_message_unref(data->request);
+      data->request = NULL;
+    }
+
+    g_free(data);
+  }
+
+  return NULL;
+}
+
 /** OSSO IC API method call handlers */
 static struct icd_osso_ic_handler icd_osso_ic_htable[] = {
 /*  {ICD_DBUS_INTERFACE, ICD_ACTIVATE_REQ, "s", icd_osso_ic_activate},
   {ICD_DBUS_INTERFACE, ICD_SHUTDOWN_REQ, "", icd_osso_ic_shutdown},*/
   {ICD_DBUS_INTERFACE, ICD_CONNECT_REQ, "su", icd_osso_ic_connect},
-  /*{ICD_DBUS_INTERFACE, ICD_DISCONNECT_REQ, "s", icd_osso_ic_disconnect},
+  /*{ICD_DBUS_INTERFACE, ICD_DISCONNECT_REQ, "s", icd_osso_ic_disconnect},*/
   {ICD_DBUS_INTERFACE, ICD_GET_IPINFO_REQ, "", icd_osso_ic_ipinfo},
-  {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "", icd_osso_ic_connstats},
+  /*{ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "", icd_osso_ic_connstats},
   {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "s", icd_osso_ic_connstats},*/
   {ICD_DBUS_INTERFACE, ICD_GET_STATE_REQ, "", icd_osso_ic_get_state},
   {ICD_DBUS_INTERFACE, "background_killing_application", "ss",

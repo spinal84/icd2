@@ -119,3 +119,36 @@ icd_network_priority_get(const gchar *srv_type, const gchar *srv_id,
 
   return priority;
 }
+
+gboolean
+icd_network_priority(const gchar *srv_type, const gchar *srv_id,
+                     const gchar *network_type, const guint network_attrs,
+                     gint *network_priority)
+{
+  gint priority;
+
+  if (network_priority)
+    *network_priority = icd_network_priority_get(srv_type, srv_id, network_type,
+                                                 network_attrs);
+
+  if (preferred_id && preferred_type && srv_type && srv_id)
+  {
+    if (!strcmp(preferred_type, srv_type))
+      return strcmp(preferred_id, srv_id) != 0;
+    else
+      return TRUE;
+  }
+
+  if (network_priority)
+    priority = *network_priority;
+  else
+  {
+    priority = icd_network_priority_get(NULL, NULL, network_type,
+                                        network_attrs);
+  }
+
+  if (network_attrs & ICD_NW_ATTR_IAPNAME)
+    priority -= ICD_NW_PRIO_SAVED_BOOSTER_VALUE;
+
+  return priority < ICD_NW_PRIO_WLAN;
+}

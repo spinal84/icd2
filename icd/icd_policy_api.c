@@ -752,3 +752,30 @@ icd_policy_api_load_modules(struct icd_context *icd_ctx)
 
   return rv;
 }
+
+void
+icd_policy_api_unload_modules(struct icd_context *icd_ctx)
+{
+  GSList *l = icd_ctx->policy_module_list;
+
+  ILOG_INFO("unloading policy api modules");
+
+  while(l)
+  {
+    struct icd_policy_module *module = (struct icd_policy_module *)l->data;
+    GSList *next = l->next;
+
+    if (module->policy.destruct)
+    {
+      ILOG_INFO("calling policy_destruct of module %s", module->name);
+      module->policy.destruct(&module->policy.private);
+    }
+
+    icd_plugin_unload_module(module->handle);
+    g_free(module->name);
+    g_free(module);
+    icd_ctx->policy_module_list =
+        g_slist_remove_link(icd_ctx->policy_module_list, l);
+    l = next;
+  }
+}

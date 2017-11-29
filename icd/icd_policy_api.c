@@ -29,6 +29,15 @@ struct icd_policy_api_request_data {
   GSList *existing_requests;
 };
 
+/** policy module scan callback and user data */
+struct icd_policy_scan_data {
+  /** policy module scan callback */
+  icd_policy_scan_cb_fn cb;
+
+  /** policy module user data */
+  gpointer user_data;
+};
+
 struct icd_policy_api_async_data;
 /**
  * @brief Function prototype for calling the actual asynchronous policy function
@@ -525,4 +534,221 @@ icd_policy_api_iap_restart(struct icd_policy_request *connection,
 {
   return icd_policy_api_run(icd_policy_api_iap_restart_iter, connection,
                             GUINT_TO_POINTER(restart_count));
+}
+
+static void
+icd_policy_api_scan_result(enum icd_scan_status status,
+                           const struct icd_scan_srv_provider *srv_provider,
+                           const struct icd_scan_cache *cache_entry,
+                           gpointer user_data)
+{
+  struct icd_policy_scan_data *data = (struct icd_policy_scan_data *)user_data;
+  enum icd_policy_scan_status scan_status;
+
+  switch (status)
+  {
+    case ICD_SCAN_NEW:
+      scan_status = ICD_POLICY_SCAN_NEW_NETWORK;
+      break;
+    case ICD_SCAN_UPDATE:
+      scan_status = ICD_POLICY_SCAN_UPDATE_NETWORK;
+      break;
+    case ICD_SCAN_NOTIFY:
+      return;
+    case ICD_SCAN_EXPIRE:
+      scan_status = ICD_POLICY_SCAN_EXPIRED_NETWORK;
+      break;
+    case ICD_SCAN_COMPLETE:
+      scan_status = ICD_POLICY_SCAN_DONE;
+      break;
+    default:
+      ILOG_WARN("scan status %d not supported by policy functions", status);
+      return;
+  }
+
+  if (srv_provider)
+  {
+    data->cb(scan_status, srv_provider->service_name,
+             srv_provider->service_type, srv_provider->service_attrs,
+             srv_provider->service_id, srv_provider->service_priority,
+             cache_entry->network_name, cache_entry->network_type,
+             cache_entry->network_attrs, cache_entry->network_id,
+             cache_entry->network_priority, cache_entry->signal,
+             data->user_data);
+  }
+  else
+  {
+    data->cb(scan_status, NULL, NULL, 0, NULL, 0, cache_entry->network_name,
+             cache_entry->network_type, cache_entry->network_attrs,
+             cache_entry->network_id, cache_entry->network_priority,
+             cache_entry->signal, data->user_data);
+  }
+}
+
+static void
+icd_policy_api_scan_start(const gchar *type, const guint scope,
+                          icd_policy_scan_cb_fn cb, gpointer user_data)
+{
+  GSList **scan_list;
+  struct icd_policy_scan_data *data;
+
+  if (!cb)
+  {
+    ILOG_CRIT("policy api scan callback cannot be NULL");
+    return;
+  }
+
+  scan_list = icd_policy_api_scan_list_get();
+  data = g_new0(struct icd_policy_scan_data, 1);
+  data->cb = cb;
+  data->user_data = user_data;
+  *scan_list = g_slist_prepend(*scan_list, data);
+
+  if (!icd_scan_results_request(type, scope, icd_policy_api_scan_result, data))
+  {
+    ILOG_DEBUG("policy api scan did not find anything to scan, freeing...");
+
+    *scan_list = g_slist_remove(*scan_list, data);
+    data->cb(ICD_POLICY_SCAN_DONE, 0, 0, 0, 0, 0, 0, type, 0, 0, 0, 0,
+             data->user_data);
+    g_free(data);
+  }
+
+}
+
+static struct icd_policy_scan_data *
+icd_policy_api_scan_find(icd_policy_scan_cb_fn cb, gpointer user_data)
+{
+  GSList *l;
+
+  for (l = *icd_policy_api_scan_list_get(); l; l = l->next)
+  {
+    struct icd_policy_scan_data *data =
+        (struct icd_policy_scan_data *)scan_list->data;
+
+    if (data)
+    {
+      if (cb == data->cb && user_data == data->user_data)
+        return data;
+    }
+  }
+
+  ILOG_ERR("policy api could not find scan cb %p with user data %p", cb,
+           user_data);
+
+  return NULL;
+}
+
+static void
+icd_policy_api_scan_stop(icd_policy_scan_cb_fn cb, gpointer user_data)
+{
+  struct icd_policy_scan_data *data = icd_policy_api_scan_find(cb, user_data);
+
+  if (data)
+  {
+    GSList **scan_list;
+
+    icd_scan_results_unregister(icd_policy_api_scan_result, data);
+    scan_list = icd_policy_api_scan_list_get();
+    *scan_list = g_slist_remove(*scan_list, data);
+    g_free(data);
+  }
+}
+
+static void
+icd_policy_api_merge_requests(struct icd_policy_request *request_to_merge,
+                              struct icd_policy_request *existing_request)
+{
+  if (request_to_merge)
+  {
+    if (existing_request)
+    {
+      struct icd_request *merge =
+          (struct icd_request *)request_to_merge->request_token;
+      struct icd_request *existing =
+          (struct icd_request *)existing_request->request_token;
+
+      if (request_to_merge->request_token == existing )
+      {
+        ILOG_CRIT("request to merge %p is the same as existing request %p",
+                  request_to_merge, existing_request);
+      }
+      else
+        icd_request_merge(merge, existing);
+    }
+    else
+      ILOG_CRIT("NULL pointer passed instead of existing request to merge");
+  }
+  else
+    ILOG_CRIT("NULL pointer passed instead of request to merge");
+}
+
+static void
+icd_policy_api_make_request(guint policy_attrs, gchar *service_type,
+                            guint service_attrs, gchar *service_id,
+                            gchar *network_type, guint network_attrs,
+                            gchar *network_id)
+{
+  icd_request_make(icd_request_new(policy_attrs, service_type, service_attrs,
+                                   service_id, network_type, network_attrs,
+                                   network_id));
+}
+
+static void
+icd_policy_api_disconnect_iap(struct icd_policy_request *network)
+{
+  if (network)
+  {
+    struct icd_request *request = (struct icd_request *)network->request_token;
+
+    if (&request->req == network)
+    {
+      ILOG_CRIT("it is NOT ok to give a request '%p' instead of a network",
+                &request->req);
+    }
+    else
+      icd_request_cancel(network->request_token, ICD_POLICY_ATTRIBUTE_CONN_UI);
+  }
+  else
+    ILOG_CRIT("iap to disconnect is NULL");
+}
+
+static gboolean
+icd_policy_api_init_cb(const gchar *module_name, void *handle,
+                       gpointer init_function, gpointer data)
+{
+  struct icd_context *icd_ctx = (struct icd_context *)data;
+  struct icd_policy_module *module = g_new0(struct icd_policy_module, 1);
+
+  module->handle = handle;
+  ((icd_policy_init_fn)init_function)(&module->policy,
+                                      icd_policy_api_add_iap,
+                                      icd_policy_api_merge_requests,
+                                      icd_policy_api_make_request,
+                                      icd_policy_api_scan_start,
+                                      icd_policy_api_scan_stop,
+                                      icd_policy_api_disconnect_iap,
+                                      icd_network_priority,
+                                      icd_srv_provider_check);
+  module->name = g_strdup(module_name);
+  icd_ctx->policy_module_list = g_slist_append(icd_ctx->policy_module_list,
+                                               module);
+
+  return TRUE;
+}
+
+gboolean
+icd_policy_api_load_modules(struct icd_context *icd_ctx)
+{
+  GSList *modules = icd_policy_modules_get();
+  gboolean rv;
+
+  for (rv = icd_plugin_load_list("/usr/lib/icd2", modules, ICD_POLICY_INIT,
+                                 icd_policy_api_init_cb, icd_ctx);
+        modules; modules = g_slist_delete_link(modules, modules))
+  {
+    g_free(modules->data);
+  }
+
+  return rv;
 }

@@ -794,7 +794,8 @@ icd_request_merge(struct icd_request *merge_request,
 
   if (merge_request == existing)
   {
-    ILOG_CRIT("cannot merge request %p with itself %p", merge_request, merge_request);
+    ILOG_CRIT("cannot merge request %p with itself %p", merge_request,
+              merge_request);
     return FALSE;
   }
 
@@ -825,7 +826,7 @@ skip:
 
   while (l)
   {
-    struct icd_tracking_info * track = (struct icd_tracking_info *)l->data;
+    struct icd_tracking_info *track = (struct icd_tracking_info *)l->data;
     GSList *next = l->next;
 
     if (!track)
@@ -857,13 +858,17 @@ skip:
     l = next;
   }
 
+  /* FIXME - simplify me */
   existing->req.attrs =
-      (merge_request->req.attrs | (existing->req.attrs & (ICD_POLICY_ATTRIBUTE_CONN_UI |
-                                                          ICD_POLICY_ATTRIBUTE_CONNECTIONS_FAILED |
-                                                          ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE_CHANGE))) |
-      (existing->req.attrs & (merge_request->req.attrs & (ICD_POLICY_ATTRIBUTE_NO_INTERACTION |
-                                                          ICD_POLICY_ATTRIBUTE_BACKGROUND))) |
-       (existing->req.attrs & ICD_POLICY_ATTRIBUTE_HAS_CONNECTIONS);
+      (merge_request->req.attrs |
+       (existing->req.attrs &
+        (ICD_POLICY_ATTRIBUTE_CONN_UI |
+         ICD_POLICY_ATTRIBUTE_CONNECTIONS_FAILED |
+         ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE_CHANGE))) |
+      (existing->req.attrs & (merge_request->req.attrs &
+                              (ICD_POLICY_ATTRIBUTE_NO_INTERACTION |
+                               ICD_POLICY_ATTRIBUTE_BACKGROUND))) |
+      (existing->req.attrs & ICD_POLICY_ATTRIBUTE_HAS_CONNECTIONS);
   icd_policy_api_request_cancel(&merge_request->req);
   icd_request_update_status(ICD_REQUEST_MERGED, merge_request);
   ILOG_DEBUG("Request %p, attrs %0x merged with %p, resulting attrs %0x",

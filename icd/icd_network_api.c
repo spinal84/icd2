@@ -13,6 +13,12 @@
 #include "config.h"
 #include "icd_version.h"
 
+/** prefix for the ICd network API modules */
+#define ICD_NW_API_PREFIX   "libicd_network_"
+
+/** name of the ICd network API init function */
+#define ICD_NW_INIT   "icd_nw_init"
+
 /**
  * @brief make icd_scan use the module iteration function
  *
@@ -358,4 +364,271 @@ icd_network_api_has_type(struct icd_network_module *module, const gchar *type)
   }
 
   return FALSE;
+}
+
+static gboolean
+icd_network_api_init_cb(const gchar *module_name, void *handle,
+                        gpointer init_function, gpointer data)
+{
+  struct icd_context *icd_ctx = (struct icd_context *)data;
+  struct icd_network_module *module = g_new0(struct icd_network_module, 1);
+
+  module->handle = handle;
+
+  if (!((icd_nw_init_fn)init_function)(&module->nw, icd_network_api_watch_pid,
+                                       module, icd_network_api_close,
+                                       icd_network_api_status_update,
+                                       icd_network_api_renew))
+  {
+    goto err_init;
+  }
+
+  if (!module->nw.version)
+  {
+    ILOG_ERR("Module '%s' did not set version", module_name);
+    goto err_version;
+  }
+
+  if (icd_version_compare(module->nw.version, PACKAGE_VERSION) > 0)
+  {
+    ILOG_ERR("module '%s' version %s is greater than " PACKAGE_TARNAME
+             " version " PACKAGE_VERSION ", not loading it",
+             module_name, module->nw.version);
+    goto err_version;
+  }
+
+  if (icd_version_compare(module->nw.version, "0.25") < 0 &&
+      (module->nw.ip_addr_info || module->nw.ip_stats ||
+       module->nw.link_post_stats || module->nw.link_stats ||
+       module->nw.stop_search))
+  {
+    ILOG_ERR("module '%s' version %s compiled against API < 0.25, not loading it",
+             module_name, module->nw.version);
+    goto err_version;
+  }
+
+  if (icd_version_compare(module->nw.version, "0.26") < 0 &&
+      (module->nw.ip_up || module->nw.link_post_up || module->nw.link_up))
+  {
+    ILOG_ERR("module '%s' version %s compiled against API < 0.26, not loading it",
+             module_name, module->nw.version);
+    goto err_version;
+  }
+
+  if (icd_version_compare(module->nw.version, "0.37") < 0)
+  {
+    if (module->nw.start_search)
+    {
+      ILOG_ERR("module '%s' version %s compiled against API < 0.37, not loading it",
+               module_name, module->nw.version);
+      goto err_version;
+    }
+  }
+  else if (module->nw.start_search &&
+           module->nw.search_lifetime <= module->nw.search_interval)
+  {
+    ILOG_ERR("module '%s' search lifetime (%d) must be greater than search interval (%d)",
+             module_name, module->nw.search_lifetime,
+             module->nw.search_interval);
+    goto err_version;
+  }
+
+  ILOG_DEBUG("Network module %p '%s' version %s", module, module_name,
+             module->nw.version);
+
+  module->name = g_strdup(module_name);
+  icd_ctx->nw_module_list = g_slist_prepend(icd_ctx->nw_module_list, module);
+
+  if (module->nw.start_search)
+    icd_scan_cache_init(module);
+  return 1;
+
+err_version:
+    if (module->nw.network_destruct)
+      module->nw.network_destruct(&module->nw.private);
+
+    icd_plugin_unload_module(module->handle);
+
+err_init:
+    if ( (unsigned int)icd_log_get_level() <= 2 )
+      syslog(28, "network module %p '%s' failed to load", module, module_name);
+    g_free(module);
+    return 0;
+
+}
+
+gboolean
+icd_network_api_load_modules(struct icd_context *icd_ctx)
+{
+  gchar *network_type;
+  GSList *modules;
+  GConfClient *gconf;
+  GSList *dirs;
+  gchar *dir;
+  gboolean rv = FALSE;
+  GError *err = NULL;
+
+  if (!icd_plugin_load_all("/usr/lib/icd2", ICD_NW_API_PREFIX, ICD_NW_INIT,
+                           icd_network_api_init_cb, icd_ctx))
+  {
+    return FALSE;
+  }
+
+  icd_ctx->type_to_module =
+      g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  gconf = gconf_client_get_default();
+  dirs = gconf_client_all_dirs(gconf, ICD_GCONF_NETWORK_MAPPING, &err);
+
+  if (err)
+  {
+    ILOG_ERR("could not find network type to module mappings: %s",
+             err->message);
+    g_clear_error(&err);
+    g_object_unref(gconf);
+    return FALSE;
+  }
+
+  if (!dirs)
+  {
+    g_object_unref(gconf);
+    goto err_out;
+  }
+
+  do
+  {
+    dir = (gchar *)dirs->data;
+    network_type = g_strrstr(dir, "/");
+
+    if (network_type)
+      network_type++;
+
+    modules = icd_network_modules_get(network_type);
+
+    if (modules)
+    {
+      GSList *type_to_module = NULL;
+      gboolean all_found = TRUE;
+
+      while (modules)
+      {
+        gchar *name = (gchar *)modules->data;
+        GSList *tmpl = icd_context_get()->nw_module_list;
+
+        while (tmpl)
+        {
+          struct icd_network_module *module =
+              (struct icd_network_module *)tmpl->data;
+
+          if (!strcmp(name, module->name))
+          {
+            ILOG_DEBUG("network type '%s' uses module '%s'", network_type,
+                       name);
+            type_to_module = g_slist_append(type_to_module, module);
+            break;
+          }
+
+          tmpl = tmpl->next;
+        }
+
+        if (!tmpl)
+        {
+
+          ILOG_DEBUG("network type '%s' could not find module '%s'",
+                     network_type, name);
+          all_found = FALSE;
+        }
+
+        g_free(name);
+        modules = g_slist_delete_link(modules, modules);
+      }
+
+      if (all_found)
+      {
+        GSList *tmpl = type_to_module;
+
+        g_hash_table_insert(icd_ctx->type_to_module, g_strdup(network_type),
+                            type_to_module);
+
+        while (tmpl)
+        {
+          struct icd_network_module *mod =
+              (struct icd_network_module *)tmpl->data;
+
+          mod->network_types = g_slist_prepend(mod->network_types,
+                                               g_strdup(network_type));
+          tmpl = tmpl->next;
+        }
+
+        rv = TRUE;
+      }
+      else
+        g_slist_free(type_to_module);
+    }
+    else
+      ILOG_ERR("network type '%s' has no modules defined", network_type);
+
+    g_free(dir);
+    dirs = g_slist_delete_link(dirs, dirs);
+  }
+  while (dirs);
+
+  g_object_unref(gconf);
+
+  if (!rv)
+    goto err_out;
+
+  return rv;
+
+err_out:
+  ILOG_CRIT("could not map any network type to network modules");
+
+  return FALSE;
+}
+
+void
+icd_network_api_unload_modules(struct icd_context *icd_ctx)
+{
+  GSList *l = icd_ctx->nw_module_list;;
+
+  ILOG_DEBUG("Unloading network api modules");
+
+  while (l)
+  {
+    struct icd_network_module *module = (struct icd_network_module *)l->data;
+    GSList *next = l->next;
+
+    if (module->pid_list)
+    {
+      ILOG_ERR("Module %s still has child processes running but unloading anyway ",
+               module->name);
+    }
+
+    if (module->nw.network_destruct )
+    {
+      ILOG_DEBUG("Calling network_destruct of module %s", module->name);
+      module->nw.network_destruct(&module->nw.private);
+    }
+    else
+      ILOG_DEBUG("No network_destruct function in module %s", module->name);
+
+    icd_scan_cache_remove(module);
+    icd_plugin_unload_module(module->handle);
+
+    while (module->network_types)
+    {
+      ILOG_DEBUG("removing network type '%s' from '%s'",
+                 (gchar *)module->network_types->data, module->name);
+      g_free(module->network_types->data);
+      module->network_types =
+          g_slist_delete_link(module->network_types, module->network_types);
+    }
+
+    g_free(module->name);
+    g_free(module);
+    icd_ctx->nw_module_list = g_slist_remove_link(icd_ctx->nw_module_list, l);
+    l = next;
+  }
+
+  if (icd_ctx->type_to_module)
+    g_hash_table_destroy(icd_ctx->type_to_module);
 }

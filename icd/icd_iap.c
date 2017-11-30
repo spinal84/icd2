@@ -21,6 +21,7 @@
 #include "icd_dbus_api.h"
 
 static gboolean icd_iap_run_restart(struct icd_iap *iap);
+static gboolean icd_iap_run_renew(struct icd_iap *iap);
 
 /** names for the different states */
 const gchar *icd_iap_state_names[ICD_IAP_MAX_STATES] = {
@@ -666,6 +667,165 @@ icd_iap_free(struct icd_iap *iap)
   g_free(iap);
 }
 
+static void
+icd_iap_run_renew_cb(enum icd_nw_renew_status status, gpointer renew_token)
+{
+  struct icd_iap *iap = (struct icd_iap *)renew_token;
+
+  if (!iap )
+  {
+    ILOG_ERR("NULL renew token received");
+    return;
+  }
+
+  if (status == ICD_NW_RENEW_CHANGES_MADE)
+  {
+    enum icd_nw_layer renew_layer = iap->renew_layer;
+
+    iap->current_renew_module = NULL;
+    iap->renew_layer = ICD_NW_LAYER_NONE;
+
+    ILOG_DEBUG("renew returned %d for iap %p, restarting layer %s", status,
+               iap, icd_iap_layer_names[renew_layer]);
+    icd_iap_restart(iap, renew_layer);
+  }
+  else
+  {
+    if (iap->current_renew_module)
+      iap->current_renew_module = iap->current_renew_module->next;
+
+    if (!icd_iap_run_renew(iap))
+    {
+      ILOG_DEBUG("nothing more to renew for iap %p, %s/%0x/%s", iap,
+                 iap->connection.network_type, iap->connection.network_attrs,
+                 iap->connection.network_id);
+      iap->renew_layer = ICD_NW_LAYER_NONE;
+    }
+  }
+}
+
+static gboolean
+icd_iap_run_renew(struct icd_iap *iap)
+{
+  GSList *current_module;
+  enum icd_nw_layer renew_layer;
+
+  current_module = iap->current_renew_module;
+
+  if (!current_module)
+  {
+    ILOG_DEBUG("no more nw modules to renew for iap %p", iap);
+    return FALSE;
+  }
+
+  renew_layer = iap->renew_layer;
+
+  if (renew_layer == ICD_NW_LAYER_IP)
+  {
+    while (current_module)
+    {
+      struct icd_network_module *module =
+          (struct icd_network_module *)current_module->data;
+
+          if (module)
+          {
+            if (module->nw.ip_renew)
+            {
+              ILOG_DEBUG("renew ip layer for module '%s'", module->name);
+              module->nw.ip_renew(iap->connection.network_type,
+                                  iap->connection.network_attrs,
+                                  iap->connection.network_id,
+                                  icd_iap_run_renew_cb, iap,
+                                  &module->nw.private);
+
+              return !!iap->current_renew_module;
+            }
+
+            ILOG_DEBUG("module '%s' does not have an ip layer renew function",
+                       module->name);
+            if (iap->current_renew_module)
+              iap->current_renew_module = iap->current_renew_module->next;
+          }
+          else
+            iap->current_renew_module = current_module->next;
+
+          current_module = iap->current_renew_module;
+    }
+  }
+  else if (renew_layer == ICD_NW_LAYER_LINK)
+  {
+    while (current_module)
+    {
+      struct icd_network_module *module =
+          (struct icd_network_module *)current_module->data;
+
+          if (module)
+          {
+            if (module->nw.link_renew)
+            {
+              ILOG_DEBUG("renew link layer for module '%s'", module->name);
+              module->nw.link_renew(iap->connection.network_type,
+                                    iap->connection.network_attrs,
+                                    iap->connection.network_id,
+                                    icd_iap_run_renew_cb, iap,
+                                    &module->nw.private);
+
+              return !!iap->current_renew_module;
+            }
+
+            ILOG_DEBUG("module '%s' does not have a link layer renew function",
+                       module->name);
+
+            if (iap->current_renew_module)
+              iap->current_renew_module = iap->current_renew_module->next;
+          }
+          else
+            iap->current_renew_module = current_module->next;
+
+          current_module = iap->current_renew_module;
+    }
+  }
+  else if(renew_layer == ICD_NW_LAYER_LINK_POST)
+  {
+    while (current_module)
+    {
+      struct icd_network_module *module =
+          (struct icd_network_module *)current_module->data;
+
+          if (module)
+          {
+            if (!module->nw.link_post_renew)
+            {
+              ILOG_DEBUG("module '%s' does not have a link post layer renew function",
+                         module->name);
+
+              if (iap->current_renew_module)
+                iap->current_renew_module = iap->current_renew_module->next;
+            }
+
+            ILOG_DEBUG("renew link post layer for module '%s'", module->name);
+            module->nw.link_post_renew(iap->connection.network_type,
+                                       iap->connection.network_attrs,
+                                       iap->connection.network_id,
+                                       icd_iap_run_renew_cb, iap,
+                                       &module->nw.private);
+
+            return !!iap->current_renew_module;
+          }
+          else
+            iap->current_renew_module = current_module->next;
+
+          current_module = iap->current_renew_module;
+    }
+  }
+  else
+  {
+    ILOG_DEBUG("renew for %s not supported",
+               icd_iap_layer_names[iap->renew_layer]);
+  }
+
+  return FALSE;
+}
 
 void
 icd_iap_renew(struct icd_iap *iap, enum icd_nw_layer renew_layer)

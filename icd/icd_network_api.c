@@ -441,20 +441,20 @@ icd_network_api_init_cb(const gchar *module_name, void *handle,
 
   if (module->nw.start_search)
     icd_scan_cache_init(module);
-  return 1;
+
+  return TRUE;
 
 err_version:
-    if (module->nw.network_destruct)
-      module->nw.network_destruct(&module->nw.private);
+  if (module->nw.network_destruct)
+    module->nw.network_destruct(&module->nw.private);
 
-    icd_plugin_unload_module(module->handle);
+  icd_plugin_unload_module(module->handle);
 
 err_init:
-    if ( (unsigned int)icd_log_get_level() <= 2 )
-      syslog(28, "network module %p '%s' failed to load", module, module_name);
-    g_free(module);
-    return 0;
+  ILOG_WARN("network module %p '%s' failed to load", module, module_name);
+  g_free(module);
 
+  return FALSE;
 }
 
 gboolean

@@ -12,6 +12,12 @@
 #include "icd_network_priority.h"
 #include "icd_version.h"
 
+/** service provider entry for the module name */
+#define ICD_SRV_PROVIDER_MODULE_NAME   "/module"
+
+/** service provider entry for supported network types */
+#define ICD_SRV_PROVIDER_NETWORK_TYPES   "/network_type"
+
 /** pid and exit value structure */
 struct pid_notify {
   /** process id */
@@ -394,6 +400,99 @@ icd_srv_provider_init(const gchar *module_name, void *handle,
     ILOG_WARN("service module %p '%s' failed to load", module, module_name);
     g_free(module);
   }
+
+  return rv;
+}
+
+gboolean
+icd_srv_provider_load_modules(struct icd_context *icd_ctx)
+{
+  GConfClient *gconf = gconf_client_get_default();
+  struct icd_srv_provider_cb_data cb_data;
+  GSList *dirs;
+  GError *err = NULL;
+  gboolean rv = FALSE;
+
+  dirs = gconf_client_all_dirs(gconf, ICD_GCONF_SRV_PROVIDERS, &err);
+
+  if (err)
+  {
+    ILOG_INFO("could not find service provider types: %s", err->message);
+    g_clear_error(&err);
+    g_object_unref(gconf);
+    return FALSE;
+  }
+
+  cb_data.icd_ctx = icd_ctx;
+  icd_ctx->srv_type_to_srv_module =
+      g_hash_table_new_full(g_str_hash,g_str_equal, g_free, NULL);
+  icd_ctx->nw_type_to_srv_module =
+      g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+
+  while (dirs)
+  {
+    gchar *dir = (gchar *)dirs->data;
+
+    if (dir)
+    {
+      GSList *network_types;
+      gchar *name;
+      gchar *key;
+      gchar *filename;
+      gchar *service_type = g_strrstr(dir, "/");
+
+      cb_data.service_type = service_type;
+      key = g_strconcat(dir, ICD_SRV_PROVIDER_MODULE_NAME, NULL);
+      name = gconf_client_get_string(gconf, key, &err);
+      g_free(key);
+
+      if (err)
+      {
+        ILOG_INFO("could not find service provider module name: %s",
+                  err->message);
+        g_clear_error(&err);
+      }
+
+      key = g_strconcat(dir, ICD_SRV_PROVIDER_NETWORK_TYPES, NULL);
+      network_types = gconf_client_get_list(gconf, key, GCONF_VALUE_STRING,
+                                            &err);
+      g_free(key);
+      cb_data.network_types = network_types;
+
+      if (err)
+      {
+        ILOG_WARN("could not find service provider network types: %s",
+                  err->message);
+        g_clear_error(&err);
+      }
+
+      filename = g_strconcat("/usr/lib/icd2", "/", name, NULL);
+
+      if (name && service_type && *service_type && network_types)
+      {
+        if (icd_plugin_load(filename, name, "icd_srv_init",
+                            icd_srv_provider_init, &cb_data))
+        {
+            rv = TRUE;
+        }
+      }
+
+      while (network_types);
+      {
+        g_free(network_types->data);
+        network_types = g_slist_delete_link(network_types, network_types);
+      }
+
+      g_free(name);
+      g_free(filename);
+    }
+
+    g_free(dir);
+    dirs = g_slist_delete_link(dirs, dirs);
+  }
+
+  if (!rv)
+    ILOG_INFO("no service provider modules loaded");
 
   return rv;
 }

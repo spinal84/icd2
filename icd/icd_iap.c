@@ -22,6 +22,9 @@
 
 static gboolean icd_iap_run_restart(struct icd_iap *iap);
 static gboolean icd_iap_run_renew(struct icd_iap *iap);
+static void icd_iap_disconnect_cb(const enum icd_nw_status status, const gpointer cb_token);
+static void icd_iap_srv_disconnect_cb(enum icd_srv_status status, gpointer disconnect_cb_token);
+static void icd_iap_run_post_down_scripts(struct icd_iap *iap);
 
 /** names for the different states */
 const gchar *icd_iap_state_names[ICD_IAP_MAX_STATES] = {
@@ -173,6 +176,174 @@ icd_iap_restart(struct icd_iap *iap, enum icd_nw_layer restart_layer)
   }
   else
     ILOG_INFO("ignored restart for iap %p since already disconnecting", iap);
+}
+
+static void
+icd_iap_disconnect_module(struct icd_iap *iap)
+{
+  switch (iap->state)
+  {
+    case ICD_IAP_STATE_SRV_UP:
+    case ICD_IAP_STATE_CONNECTED_DOWN:
+      iap->state = ICD_IAP_STATE_SRV_DOWN;
+    case ICD_IAP_STATE_SRV_DOWN:
+      if (iap->limited_conn)
+      {
+        iap->limited_conn = FALSE;
+        icd_status_limited_conn(iap, NULL, NULL);
+      }
+
+      if (icd_srv_provider_disconnect(iap, icd_iap_srv_disconnect_cb, iap))
+      {
+        ILOG_INFO("called srv disconnect function");
+        return;
+      }
+
+      ILOG_INFO("No srv module to call");
+    case ICD_IAP_STATE_IP_UP:
+      iap->state = ICD_IAP_STATE_IP_DOWN;
+    case ICD_IAP_STATE_IP_DOWN:
+    {
+      GSList *l = iap->ip_down_list;
+
+      if (l)
+      {
+        struct icd_iap_disconnect_data *data =
+            (struct icd_iap_disconnect_data *)l->data;
+
+        if (data)
+        {
+          icd_nw_ip_down_fn function = (icd_nw_ip_down_fn)data->function;
+
+          iap->ip_down_list = g_slist_delete_link(l, iap->ip_down_list);
+
+          if (function)
+          {
+            ILOG_INFO("calling ip_down function %p", function);
+            function(iap->connection.network_type,
+                     iap->connection.network_attrs,
+                     iap->connection.network_id,
+                     iap->interface_name, icd_iap_disconnect_cb, iap,
+                     data->private);
+            g_free(data);
+            return;
+          }
+        }
+        else
+          iap->ip_down_list = g_slist_delete_link(l, iap->ip_down_list);
+
+        ILOG_ERR("ip_down function is NULL");
+        g_free(data);
+      }
+      else
+      {
+        ILOG_INFO("no more ip_down functions to call");
+
+        if (icd_iap_run_restart(iap))
+          return;
+      }
+    }
+    case ICD_IAP_STATE_LINK_POST_UP:
+      iap->state = ICD_IAP_STATE_LINK_PRE_DOWN;
+    case ICD_IAP_STATE_LINK_PRE_DOWN:
+    {
+      GSList *l = l = iap->link_pre_down_list;
+
+      if (l)
+      {
+        struct icd_iap_disconnect_data *data =
+            (struct icd_iap_disconnect_data *)l->data;
+
+        if (data)
+        {
+          icd_nw_link_pre_down_fn function =
+              (icd_nw_link_pre_down_fn)data->function;
+
+          iap->link_pre_down_list =
+              g_slist_delete_link(l, iap->link_pre_down_list);
+
+          if (function)
+          {
+            ILOG_INFO("calling link_pre_down function %p", function);
+            function(iap->connection.network_type,
+                     iap->connection.network_attrs,
+                     iap->connection.network_id,
+                     iap->interface_name, icd_iap_disconnect_cb, iap,
+                     data->private);
+            g_free(data);
+            return;
+          }
+        }
+        else
+        {
+          iap->link_pre_down_list =
+              g_slist_delete_link(l, iap->link_pre_down_list);
+        }
+
+        ILOG_ERR("link_pre_down function is NULL");
+        g_free(data);
+      }
+      else
+      {
+        ILOG_INFO("no more link_pre_down functions to call");
+
+        if (icd_iap_run_restart(iap))
+          return;
+      }
+    }
+    case ICD_IAP_STATE_LINK_UP:
+      iap->state = ICD_IAP_STATE_LINK_DOWN;
+    case ICD_IAP_STATE_LINK_DOWN:
+    {
+      GSList *l = iap->link_down_list;
+
+      if (l)
+      {
+        struct icd_iap_disconnect_data *data =
+            (struct icd_iap_disconnect_data *)l->data;
+
+        if (data)
+        {
+          icd_nw_link_down_fn function = (icd_nw_link_down_fn)data->function;
+
+          iap->link_down_list = g_slist_delete_link(l, iap->link_down_list);
+
+          if (function)
+          {
+            ILOG_INFO("calling link_down function %p", function);
+            function(iap->connection.network_type,
+                     iap->connection.network_attrs,
+                     iap->connection.network_id,
+                     iap->interface_name, icd_iap_disconnect_cb, iap,
+                     data->private);
+            g_free(data);
+            return;
+          }
+        }
+        else
+          iap->link_down_list = g_slist_delete_link(l, iap->link_down_list);
+
+        ILOG_ERR("link_down function is NULL");
+        g_free(data);
+      }
+      else
+      {
+        ILOG_INFO("no more link_down functions to call");
+
+        if (icd_iap_run_restart(iap))
+          return;
+      }
+    }
+    case ICD_IAP_STATE_SCRIPT_PRE_UP:
+      iap->state = ICD_IAP_STATE_SCRIPT_POST_DOWN;
+    case ICD_IAP_STATE_SCRIPT_POST_DOWN:
+      icd_iap_run_post_down_scripts(iap);
+      return;
+    default:
+      ILOG_ERR("IAP in wrong state %s while disconnecting",
+               icd_iap_state_names[iap->state]);
+      return;
+  }
 }
 
 /**
@@ -1267,6 +1438,47 @@ icd_iap_post_down_script_done(const pid_t pid, const gint exit_value,
   }
 }
 
+static void
+icd_iap_run_post_down_scripts(struct icd_iap *iap)
+{
+  GSList *env = iap->script_env;
+  gchar *id = NULL;
+
+  if (iap->id && !iap->id_is_local)
+    id = gconf_escape_key(iap->id, -1);
+
+  if (!env)
+  {
+    pid_t pid;
+
+    ILOG_INFO("no env vars for post-down script");
+    pid = icd_script_post_down(iap->interface_name, id,
+                               iap->connection.network_type,
+                               NULL, icd_iap_post_down_script_done, iap);
+
+    iap->script_pids = g_slist_prepend(iap->script_pids, GINT_TO_POINTER(pid));
+  }
+  else
+  {
+    while (env)
+    {
+      if (env->data)
+      {
+        pid_t pid = icd_script_post_down(iap->interface_name, id,
+                                         iap->connection.network_type,
+                                         (const struct icd_iap_env *)env->data,
+                                         icd_iap_post_down_script_done, iap);
+        iap->script_pids = g_slist_prepend(iap->script_pids,
+                                           GINT_TO_POINTER(pid));
+      }
+
+      env = env->next;
+    }
+  }
+
+  g_free(id);
+}
+
 static gboolean
 icd_iap_run_restart(struct icd_iap *iap)
 {
@@ -1359,4 +1571,92 @@ icd_iap_run_restart(struct icd_iap *iap)
   }
 
   return TRUE;
+}
+
+gboolean
+icd_iap_id_create(struct icd_iap *iap, const gchar *new_name)
+{
+  GConfClient *gconf;
+  GError *error = NULL;
+  gchar *uuid = NULL;
+  int tries = 0;
+
+  if (iap->id)
+  {
+    g_free(iap->id);
+    iap->id = NULL;
+  }
+
+  iap->id_is_local = FALSE;
+
+  if (new_name)
+  {
+    iap->id = g_strdup(new_name);
+    return TRUE;
+  }
+
+  if (iap->connection.network_attrs & ICD_NW_ATTR_IAPNAME &&
+      iap->connection.network_id)
+  {
+    iap->id = g_strdup(iap->connection.network_id);
+    return TRUE;
+  }
+
+  tries = 0;
+  gconf = gconf_client_get_default();
+
+  while (1)
+  {
+    gchar *s;
+    gchar *dir;
+    gboolean exists;
+
+    tries++;
+
+    if (!g_file_get_contents("/proc/sys/kernel/random/uuid", &uuid, NULL,
+                             &error))
+    {
+      break;
+    }
+
+    if (uuid)
+      g_strchomp(g_strchug(uuid));
+
+    s = gconf_escape_key(uuid, -1);
+    dir = g_strconcat(ICD_GCONF_PATH, "/", s, NULL);
+    g_free(s);
+
+    exists = gconf_client_dir_exists(gconf, dir, NULL);
+    g_free(dir);
+
+    if (exists)
+    {
+      g_free(uuid);
+      uuid = NULL;
+
+      if (tries != 10)
+        continue;
+    }
+
+    g_object_unref(gconf);
+
+    if (uuid)
+    {
+      iap->id = uuid;
+      iap->id_is_local = TRUE;
+    }
+    else
+      ILOG_ERR("iap->id cannot be generated");
+
+    return TRUE;
+  }
+
+  ILOG_ERR("Unable to read file: %s", error ? error->message : "");
+
+  g_object_unref(gconf);
+
+  if (uuid)
+    g_free(uuid);
+
+  return FALSE;
 }

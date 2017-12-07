@@ -1322,3 +1322,23 @@ icd_dbus_api_send_ack(GSList *tracklist, struct icd_iap *iap)
     }
   }
 }
+
+static gboolean
+icd_dbus_api_scan_all_types(struct icd_network_module *module,
+                            gpointer user_data)
+{
+  if (module->nw.start_search)
+  {
+    GSList *l;
+    struct icd_dbus_api_scan_helper *helper =
+        (struct icd_dbus_api_scan_helper *)user_data;
+
+    for (l = module->network_types; l; l = l->next)
+    {
+      if (l->data)
+        icd_dbus_api_scan_append((gchar *)l->data, helper);
+    }
+  }
+
+  return TRUE;
+}

@@ -6,11 +6,6 @@
 #include "icd_context.h"
 #include "icd_scan.h"
 
-#define ICD_GCONF_IAP_TYPE            "type"
-#define ICD_GCONF_IAP_NAME            "name"
-#define ICD_GCONF_IAP_IS_TEMPORARY    "temporary"
-#define ICD_GCONF_AGGRESSIVE_SCANNING "aggressive_scanning"
-
 static void
 icd_gconf_check_error(GError **error)
 {

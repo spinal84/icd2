@@ -1,8 +1,15 @@
-#include "icd_network_api.h"
-#include "icd_scan.h"
 #include "icd_log.h"
+#include "icd_scan.h"
+#include "icd_status.h"
+#include "icd_network_api.h"
+#include "icd_network_priority.h"
+#include "icd_srv_provider.h"
+#include "icd_gconf.h"
 
+#include <time.h>
 #include <string.h>
+
+static gboolean icd_scan_network(struct icd_network_module *module, const gchar *network_type);
 
 /** scan listener list data */
 struct icd_scan_listener {
@@ -669,4 +676,291 @@ icd_scan_cache_rescan(gpointer data)
     ILOG_INFO("module '%s' has no listeners, scan not restarted", module->name);
 
   return FALSE;
+}
+
+static void
+icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
+            gchar *network_type, const guint network_attrs, gchar *network_id,
+            enum icd_nw_levels signal, gchar *station_id, gint dB,
+            gpointer search_cb_token)
+{
+  struct icd_network_module *module =
+      (struct icd_network_module *)search_cb_token;
+  struct icd_scan_cache_list *scan_cache_list;
+  struct icd_scan_cache_timeout *scan_cache_timeout;
+  enum icd_scan_status scan_status;
+  struct icd_scan_cache *cache_entry;
+  GSList *l;
+  guint now;
+
+  if (!module)
+  {
+    syslog(27, "ICd search_cb_token returned from module is NULL");
+    return;
+  }
+
+  if (!module->scan_progress && status != ICD_NW_SEARCH_EXPIRE)
+  {
+    ILOG_INFO("scan results returned from '%s', but no scan ongoing",
+              module->name);
+    return;
+  }
+
+  now = time(0);
+
+  if (network_name && network_type && network_id)
+  {
+    scan_cache_list = icd_scan_cache_list_lookup(module, network_id);
+
+    if (scan_cache_list)
+    {
+      cache_entry = icd_scan_cache_entry_find(scan_cache_list, network_type,
+                                              network_attrs);
+
+      if (status == ICD_NW_SEARCH_EXPIRE)
+      {
+        struct icd_scan_expire_network_data user_data;
+
+        user_data.module = module;
+        user_data.expire = now;
+        icd_scan_expire_network(network_id, scan_cache_list, &user_data);
+        return;
+      }
+
+      if (cache_entry)
+      {
+        cache_entry->last_seen = now;
+
+        if (cache_entry->signal >= signal)
+        {
+          struct icd_scan_cache new_cache_entry;
+
+          memcpy(&new_cache_entry, cache_entry, sizeof(new_cache_entry));
+          new_cache_entry.station_id = station_id;
+          new_cache_entry.dB = dB;
+          icd_scan_listener_notify(module, 0, &new_cache_entry,
+                                   ICD_SCAN_NOTIFY);
+          scan_status = ICD_SCAN_NOTIFY;
+        }
+        else
+        {
+          cache_entry->signal = signal;
+          cache_entry->dB = dB;
+          g_free(cache_entry->station_id);
+          cache_entry->station_id = g_strdup(station_id);
+          icd_scan_listener_notify(module, 0, cache_entry,
+                                   ICD_SCAN_UPDATE);
+          scan_status = ICD_SCAN_UPDATE;
+        }
+      }
+    }
+    else if (status == ICD_NW_SEARCH_EXPIRE)
+      return;
+    else
+    {
+      cache_entry = g_new0(struct icd_scan_cache, 1);
+      cache_entry->network_name = g_strdup(network_name);
+      cache_entry->network_type = g_strdup(network_type);
+      cache_entry->network_attrs = network_attrs;
+      cache_entry->network_id = g_strdup(network_id);
+      cache_entry->signal = signal;
+      cache_entry->station_id = g_strdup(station_id);
+      cache_entry->dB = dB;
+      cache_entry->last_seen = now;
+      cache_entry->network_priority = icd_network_priority_get(
+            0, 0, cache_entry->network_type, cache_entry->network_attrs);
+
+      if (!scan_cache_list)
+        scan_cache_list = g_new0(struct icd_scan_cache_list, 1);
+
+      icd_scan_cache_entry_add(module, scan_cache_list, cache_entry);
+      icd_scan_listener_notify(module, 0, cache_entry, 0);
+      scan_status = ICD_SCAN_NEW;
+    }
+
+    icd_srv_provider_identify(module, cache_entry, scan_status);
+
+    if (status != ICD_NW_SEARCH_COMPLETE)
+      return;
+  }
+
+  if (status == ICD_NW_SEARCH_COMPLETE)
+  {
+    struct icd_scan_expire_network_data user_data;
+
+    user_data.module = module;
+    user_data.expire = time(0) - module->nw.search_lifetime;
+    g_hash_table_foreach_remove(module->scan_cache_table,
+                                (GHRFunc)icd_scan_expire_network_for_hash,
+                                &user_data);
+
+    cache_entry = g_new0(struct icd_scan_cache, 1);
+
+    for (l = module->network_types; l; l = l->next)
+    {
+      cache_entry->network_type = (gchar *)l->data;
+      icd_scan_listener_notify(module, 0, cache_entry,
+                               ICD_SCAN_COMPLETE);
+    }
+
+    g_free(cache_entry);
+    module->scan_progress = FALSE;
+    ILOG_INFO("module '%s' scan completed", module->name);
+
+    if (module->nw.start_search)
+    {
+      for (l = module->network_types; l; l = l->next)
+      {
+        if (l->data)
+        {
+          ILOG_INFO("scan stop for type '%s'", (const gchar *)l->data);
+          icd_status_scan_stop((const gchar *)l->data);
+        }
+      }
+    }
+
+    if (module->scan_timeout_rescan)
+      g_source_remove(module->scan_timeout_rescan);
+
+    module->scan_timeout_rescan =
+        g_timeout_add(1000 * module->nw.search_interval,
+                      icd_scan_cache_rescan, module);
+
+    scan_cache_timeout = g_new0(struct icd_scan_cache_timeout, 1);
+    scan_cache_timeout->module = module;
+
+    scan_cache_timeout->id =
+        g_timeout_add(1000 * module->nw.search_lifetime,
+                      icd_scan_cache_expire, scan_cache_timeout);
+
+    module->scan_timeout_list =
+        g_slist_prepend(module->scan_timeout_list, scan_cache_timeout);
+
+    return;
+  }
+
+  ILOG_ERR("returned scan result (%s/%s/%s) has NULL components", network_name,
+           network_type, network_id);
+}
+
+static gboolean
+icd_scan_network(struct icd_network_module *module, const gchar *network_type)
+{
+  GSList *l;
+
+  if (module->scan_progress)
+    return TRUE;
+
+  if (!module->nw.start_search)
+  {
+    ILOG_WARN("module '%s' does not have a scan function", module->name);
+    return FALSE;
+  }
+
+
+  for (l = module->network_types; l; l = l->next)
+  {
+    if (l->data)
+    {
+      ILOG_INFO("scan start for type '%s'", (const gchar *)l->data);
+      icd_status_scan_start((const gchar *)l->data);
+    }
+
+    l = l->next;
+  }
+
+  module->scan_progress = TRUE;
+  module->nw.start_search(NULL, module->scope, icd_scan_cb, module,
+                          &module->nw.private);
+
+  return TRUE;
+}
+
+gboolean
+icd_scan_results_request(const gchar *type, const guint scope,
+                         icd_scan_cb_fn cb, gpointer user_data)
+{
+  GSList *l, *m;
+  gboolean rv = FALSE;
+
+  if (!cb)
+  {
+    ILOG_WARN("listener callback cannot be NULL");
+    return FALSE;
+  }
+
+  for (l = icd_context_get()->nw_module_list; l; l = l->next)
+  {
+    struct icd_network_module *module =
+        (struct icd_network_module *)l->data;
+
+    if (!module)
+    {
+      ILOG_ERR("network module in list is NULL");
+      continue;
+    }
+    if (module->nw.start_search &&
+        (!type || icd_network_api_has_type(module, type)))
+    {
+      gboolean scan_listener_exist = icd_scan_listener_exist(module);
+
+      for (m = module->scan_listener_list; m; m = m->next)
+      {
+        struct icd_scan_listener *listener =
+            (struct icd_scan_listener *)m->data;
+
+        if (!listener)
+          continue;
+
+        if ((!type && !listener->type) ||
+            (type && listener->type &&
+             !strncmp(listener->type, type, strlen(type))))
+        {
+          if (cb == listener->cb && user_data == listener->user_data)
+            break;
+        }
+      }
+
+      if (!m)
+      {
+        struct icd_scan_listener *listener =
+            g_new0(struct icd_scan_listener, 1);
+
+        listener->cb = cb;
+        listener->user_data = user_data;
+        listener->type = g_strdup(type);
+        module->scan_listener_list =
+            g_slist_prepend(module->scan_listener_list, listener);
+
+        if (icd_scan_cache_has_elements(module))
+        {
+          g_hash_table_foreach(module->scan_cache_table, icd_scan_listener_send_list, listener);
+
+          if (module->scan_timeout_rescan)
+          {
+            struct icd_scan_cache cache_entry;
+
+            memset (&cache_entry, 0, sizeof(cache_entry));
+            cache_entry.network_type = listener->type;
+            icd_scan_listener_send_entry(NULL, &cache_entry, listener, ICD_SCAN_COMPLETE);
+          }
+        }
+      }
+
+      if ((!scan_listener_exist && !module->scan_timeout_rescan) ||
+          module->scope > scope || !icd_scan_cache_has_elements(module) ||
+          icd_gconf_get_iap_bool(NULL, ICD_GCONF_AGGRESSIVE_SCANNING, FALSE))
+      {
+        module->scope = scope;
+        icd_scan_network(module, NULL);
+      }
+
+      rv = TRUE;
+    }
+  }
+
+  if (!rv)
+    ILOG_WARN("no module supporting scanning for type '%s' found", type);
+
+  return rv;
 }

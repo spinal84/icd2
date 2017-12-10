@@ -38,6 +38,37 @@ struct icd_srv_provider_cb_data {
   GSList *network_types;
 };
 
+/** Service identification information */
+struct icd_srv_identify {
+  /** The network module */
+  struct icd_network_module *module;
+
+  /** the signal level */
+  enum icd_nw_levels signal;
+};
+
+/**
+ * @brief Helper function for comparing two strings where a NULL string is equal
+ * to another NULL string
+ *
+ * @param a string A
+ * @param b string B
+ *
+ * @return TRUE if equal, FALSE if unequal
+ *
+ */
+inline static gboolean
+string_equal(const char *a, const char *b)
+{
+  if (!a)
+    return !b;
+
+  if (b)
+    return !strcmp(a, b);
+
+  return FALSE;
+}
+
 static gboolean
 icd_srv_provider_foreach_module_pid(struct icd_srv_module *srv_module,
                                     gpointer user_data)
@@ -550,4 +581,187 @@ icd_srv_provider_unload_modules(struct icd_context *icd_ctx)
   }
 
   icd_ctx->nw_type_to_srv_module = NULL;
+}
+
+static void
+icd_srv_provider_identify_cb(const enum icd_srv_identify_status status,
+                             const gchar *service_type,
+                             const gchar *service_name,
+                             const guint service_attrs,
+                             const gchar *service_id,
+                             const gint service_priority,
+                             const gchar *network_type,
+                             const guint network_attrs,
+                             const gchar *network_id,
+                             gpointer identify_cb_token)
+{
+  struct icd_srv_identify *identify =
+      (struct icd_srv_identify *)identify_cb_token;
+  struct icd_scan_cache_list *scan_cache;
+  struct icd_scan_cache *cache_entry = NULL;
+  struct icd_scan_srv_provider *provider;
+  GSList *l;
+
+  if (!identify)
+  {
+    ILOG_ERR("identify token is NULL");
+    return;
+  }
+
+  if (status == ICD_SRV_UNKNOWN)
+    goto stop_identify;
+
+  if (!service_type || !service_id)
+  {
+    ILOG_WARN("cannot accept partial srv info, type '%s' and id '%s'",
+              service_type, service_id);
+    goto out;
+  }
+
+  if (!network_type || !network_id)
+  {
+    ILOG_WARN("cannot accept partial network info, type '%s' and id '%s'",
+              network_type, network_id);
+    goto out;
+  }
+
+  scan_cache = icd_scan_cache_list_lookup(identify->module, network_id);
+
+  if (!scan_cache)
+  {
+    ILOG_DEBUG("srv provider created cache list");
+    scan_cache = g_new0(struct icd_scan_cache_list, 1);
+    goto create_entry;
+  }
+
+  cache_entry =
+      icd_scan_cache_entry_find(scan_cache, network_type, network_attrs);
+
+  if (!cache_entry)
+  {
+    cache_entry =
+        icd_scan_cache_entry_find(scan_cache, network_type,
+                                  network_attrs | ICD_NW_ATTR_SRV_PROVIDER);
+
+    if (!cache_entry)
+    {
+create_entry:
+      cache_entry = g_new0(struct icd_scan_cache, 1);
+      cache_entry->network_attrs = network_attrs | ICD_NW_ATTR_SRV_PROVIDER;
+      cache_entry->network_type = g_strdup(network_type);
+      cache_entry->signal = identify->signal;
+      cache_entry->network_id = g_strdup(network_id);
+      cache_entry->last_seen = time(NULL);
+      cache_entry->network_priority = icd_network_priority_get(service_type,
+                                                              service_id,
+                                                              network_type,
+                                                              network_attrs);
+      icd_scan_cache_entry_add(identify->module, scan_cache, cache_entry);
+    }
+  }
+
+  l = cache_entry->srv_provider_list;
+
+  while (l)
+  {
+    provider = (struct icd_scan_srv_provider *)l->data;
+
+    if (provider && string_equal(provider->service_type, service_type) &&
+        provider->service_attrs == service_attrs &&
+        string_equal(provider->service_id, service_id))
+    {
+      break;
+    }
+
+    ILOG_DEBUG("srv provider identified network as %s/%0x/%s, %s/%0x/%s already exists",
+               service_type, service_attrs, service_id, provider->service_type,
+               provider->service_attrs, provider->service_id);
+    l = l->next;
+  }
+
+  if (l)
+  {
+    if (identify->signal > cache_entry->signal ||
+        provider->service_priority != service_priority)
+    {
+      enum icd_scan_status status;
+
+      cache_entry->signal = identify->signal;
+      provider->service_priority = service_priority;
+
+      if (identify->signal > cache_entry->signal)
+        status = ICD_SCAN_UPDATE;
+      else
+        status = ICD_SCAN_NOTIFY;
+
+      icd_scan_listener_notify(identify->module, provider, cache_entry, status);
+    }
+  }
+  else
+  {
+    provider = g_new0(struct icd_scan_srv_provider, 1);
+    provider->service_type = g_strdup(service_type);
+    provider->service_name = g_strdup(service_name);
+    provider->service_attrs = service_attrs;
+    provider->service_priority = service_priority;
+    provider->service_id = g_strdup(service_id);
+    cache_entry->srv_provider_list =
+        g_slist_prepend(cache_entry->srv_provider_list, provider);
+    icd_scan_listener_notify(identify->module, provider, cache_entry,
+                             ICD_SCAN_NEW);
+  }
+
+out:
+  if (!(status & ICD_SRV_CONTINUE))
+    goto stop_identify;
+
+  return;
+
+stop_identify:
+    g_free(identify);
+}
+
+gboolean
+icd_srv_provider_identify(struct icd_network_module *nw_module,
+                          struct icd_scan_cache *cache_entry,
+                          enum icd_scan_status status)
+{
+  GSList *l;
+  gboolean rv = FALSE;
+
+  l = (GSList *)g_hash_table_lookup(icd_context_get()->nw_type_to_srv_module,
+                                    cache_entry->network_type);
+
+  for (; l; l = l->next)
+  {
+    struct icd_srv_module *module = (struct icd_srv_module *)l->data;
+    if (module)
+    {
+      if (module->srv.identify)
+      {
+        struct icd_srv_identify *identify = g_new0(struct icd_srv_identify, 1);
+
+        rv = TRUE;
+        identify->module = nw_module;
+        identify->signal = cache_entry->signal;
+        module->srv.identify(status, cache_entry->network_type,
+                             cache_entry->network_name,
+                             cache_entry->network_attrs,
+                             cache_entry->network_id,
+                             cache_entry->network_priority,
+                             cache_entry->signal,
+                             cache_entry->station_id, cache_entry->dB,
+                             icd_srv_provider_identify_cb, identify,
+                             &module->srv.private);
+      }
+    }
+    else
+    {
+      ILOG_WARN("service module NULL for nw type '%s'",
+                cache_entry->network_type);
+    }
+
+  }
+
+  return rv;
 }

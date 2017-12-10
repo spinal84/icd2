@@ -688,7 +688,7 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
       (struct icd_network_module *)search_cb_token;
   struct icd_scan_cache_list *scan_cache_list;
   struct icd_scan_cache_timeout *scan_cache_timeout;
-  enum icd_scan_status scan_status;
+  enum icd_scan_status scan_status = ICD_SCAN_NEW;
   struct icd_scan_cache *cache_entry;
   GSList *l;
   guint now;
@@ -738,7 +738,7 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
           memcpy(&new_cache_entry, cache_entry, sizeof(new_cache_entry));
           new_cache_entry.station_id = station_id;
           new_cache_entry.dB = dB;
-          icd_scan_listener_notify(module, 0, &new_cache_entry,
+          icd_scan_listener_notify(module, NULL, &new_cache_entry,
                                    ICD_SCAN_NOTIFY);
           scan_status = ICD_SCAN_NOTIFY;
         }
@@ -748,7 +748,7 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
           cache_entry->dB = dB;
           g_free(cache_entry->station_id);
           cache_entry->station_id = g_strdup(station_id);
-          icd_scan_listener_notify(module, 0, cache_entry,
+          icd_scan_listener_notify(module, NULL, cache_entry,
                                    ICD_SCAN_UPDATE);
           scan_status = ICD_SCAN_UPDATE;
         }
@@ -767,14 +767,15 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
       cache_entry->station_id = g_strdup(station_id);
       cache_entry->dB = dB;
       cache_entry->last_seen = now;
-      cache_entry->network_priority = icd_network_priority_get(
-            0, 0, cache_entry->network_type, cache_entry->network_attrs);
+      cache_entry->network_priority =
+          icd_network_priority_get(NULL, NULL, cache_entry->network_type,
+                                   cache_entry->network_attrs);
 
       if (!scan_cache_list)
         scan_cache_list = g_new0(struct icd_scan_cache_list, 1);
 
       icd_scan_cache_entry_add(module, scan_cache_list, cache_entry);
-      icd_scan_listener_notify(module, 0, cache_entry, 0);
+      icd_scan_listener_notify(module, NULL, cache_entry, ICD_SCAN_NEW);
       scan_status = ICD_SCAN_NEW;
     }
 
@@ -789,7 +790,7 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
     struct icd_scan_expire_network_data user_data;
 
     user_data.module = module;
-    user_data.expire = time(0) - module->nw.search_lifetime;
+    user_data.expire = time(NULL) - module->nw.search_lifetime;
     g_hash_table_foreach_remove(module->scan_cache_table,
                                 (GHRFunc)icd_scan_expire_network_for_hash,
                                 &user_data);
@@ -799,7 +800,7 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
     for (l = module->network_types; l; l = l->next)
     {
       cache_entry->network_type = (gchar *)l->data;
-      icd_scan_listener_notify(module, 0, cache_entry,
+      icd_scan_listener_notify(module, NULL, cache_entry,
                                ICD_SCAN_COMPLETE);
     }
 
@@ -963,4 +964,40 @@ icd_scan_results_request(const gchar *type, const guint scope,
     ILOG_WARN("no module supporting scanning for type '%s' found", type);
 
   return rv;
+}
+
+void
+icd_scan_cache_entry_add(struct icd_network_module *module,
+                         struct icd_scan_cache_list *scan_cache,
+                         struct icd_scan_cache *cache_entry)
+{
+  if (module && scan_cache && cache_entry)
+  {
+    scan_cache->cache_list = g_slist_prepend(scan_cache->cache_list,
+                                             cache_entry);
+    g_hash_table_replace(module->scan_cache_table,
+                         g_strdup(cache_entry->network_id), scan_cache);
+  }
+  else
+    ILOG_ERR("module, cache list or cache not given when adding scan");
+}
+
+struct icd_scan_cache *
+icd_scan_cache_entry_find(struct icd_scan_cache_list *scan_cache_list,
+                          const gchar *network_type, const guint network_attrs)
+{
+  GSList *l;
+
+  for (l = scan_cache_list->cache_list; l; l = l->next)
+  {
+    struct icd_scan_cache *cache_entry = (struct icd_scan_cache *)l->data;
+
+    if (cache_entry && cache_entry->network_attrs == network_attrs &&
+        string_equal(cache_entry->network_type, network_type))
+    {
+      return cache_entry;
+    }
+  }
+
+  return NULL;
 }

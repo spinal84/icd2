@@ -142,14 +142,14 @@ icd_status_disconnected(struct icd_iap *iap, const gchar *dbus_destination,
   icd_dbus_api_update_state(iap, dbus_destination, ICD_STATE_DISCONNECTED);
 }
 
-static void
+void
 icd_status_scan_stop(const gchar *network_type)
 {
   icd_status_send_signal(network_type, "[SCAN]", "SCAN_STOP", NULL, NULL);
   icd_dbus_api_update_search(network_type, NULL, ICD_STATE_SEARCH_STOP);
 }
 
-static void
+void
 icd_status_scan_start(const gchar *network_type)
 {
   icd_status_send_signal(network_type, "[SCAN]", "SCAN_START", NULL, NULL);

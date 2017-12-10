@@ -1342,3 +1342,41 @@ icd_dbus_api_scan_all_types(struct icd_network_module *module,
 
   return TRUE;
 }
+
+gboolean
+icd_dbus_api_update_search(const gchar *network_type, const gchar *destination,
+                           const enum icd_connection_state state)
+{
+  DBusMessage *msg;
+  const gchar *empty = "";
+
+  msg = dbus_message_new_signal(ICD_DBUS_API_PATH,
+                                ICD_DBUS_API_INTERFACE,
+                                ICD_DBUS_API_STATE_SIG);
+
+  if (!msg || !dbus_message_set_destination(msg, destination))
+  {
+    ILOG_ERR("dbus api could not create state signal");
+
+    if (msg)
+      dbus_message_unref(msg);
+
+    return FALSE;
+  }
+
+  if (dbus_message_append_args(msg,
+                               DBUS_TYPE_STRING,
+                               network_type ? &network_type : &empty,
+                               DBUS_TYPE_UINT32, &state,
+                               DBUS_TYPE_INVALID))
+  {
+    icd_dbus_send_system_msg(msg);
+    dbus_message_unref(msg);
+    return TRUE;
+  }
+
+  ILOG_ERR("dbus api could not add attributes to state signal");
+  dbus_message_unref(msg);
+
+  return FALSE;
+}

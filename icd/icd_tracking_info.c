@@ -23,7 +23,7 @@ icd_tracking_info_update(struct icd_tracking_info *track, const gchar *sender,
   {
     ILOG_ERR("tracking info NULL");
 
-    return NULL;
+    return FALSE;
   }
 
   if (sender)

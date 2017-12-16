@@ -765,3 +765,15 @@ icd_srv_provider_identify(struct icd_network_module *nw_module,
 
   return rv;
 }
+
+gboolean
+icd_srv_provider_has_next(struct icd_iap *iap)
+{
+  if (iap->connection.service_type && iap->connection.service_id)
+    return iap->srv_connect_cb == NULL;
+
+  ILOG_DEBUG("no service module for iap %p since service type or service id is empty: '%s'/'%s'",
+             iap, iap->connection.service_type, iap->connection.service_id);
+
+  return FALSE;
+}

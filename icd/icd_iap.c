@@ -26,6 +26,7 @@ static void icd_iap_disconnect_cb(const enum icd_nw_status status, const gpointe
 static void icd_iap_srv_disconnect_cb(enum icd_srv_status status, gpointer disconnect_cb_token);
 static void icd_iap_run_post_down_scripts(struct icd_iap *iap);
 static void icd_iap_post_up_script_done(const pid_t pid, const gint exit_value, gpointer user_data);
+static void icd_iap_module_next(struct icd_iap *iap);
 
 /** names for the different states */
 const gchar *icd_iap_state_names[ICD_IAP_MAX_STATES] = {
@@ -1024,6 +1025,205 @@ icd_iap_renew(struct icd_iap *iap, enum icd_nw_layer renew_layer)
   }
 }
 
+static void
+icd_iap_up_callback(const enum icd_nw_status status, const gchar *err_str,
+                    const gpointer cb_token)
+{
+  struct icd_iap *iap = (struct icd_iap *)cb_token;
+  struct icd_network_module *module;
+
+  if (!iap)
+    ILOG_CRIT("_up callback returns NULL iap");
+
+  ILOG_INFO("iap %p callback in state %s with status %d, error '%s', interface '%s'",
+            iap, icd_iap_state_names[iap->state], status, err_str,
+            iap->interface_name);
+
+  if (iap->current_module)
+    module = (struct icd_network_module *)iap->current_module->data;
+  else
+  {
+    if (iap->state == ICD_IAP_STATE_LINK_UP ||
+        iap->state == ICD_IAP_STATE_LINK_POST_UP ||
+        iap->state == ICD_IAP_STATE_IP_UP)
+    {
+      ILOG_CRIT("_up callback current module is NULL in state %s",
+                icd_iap_state_names[iap->state]);
+      return;
+    }
+
+    module = NULL;
+  }
+
+  switch (status)
+  {
+    case ICD_NW_SUCCESS:
+    case ICD_NW_SUCCESS_NEXT_LAYER:
+    {
+      switch (iap->state)
+      {
+        case ICD_IAP_STATE_LINK_UP:
+        {
+          ILOG_INFO("module '%s' link_up callback", module->name);
+
+          if (module->nw.link_down)
+          {
+            struct icd_iap_disconnect_data *data =
+                g_new0(struct icd_iap_disconnect_data, 1);
+
+            data->function = module->nw.link_down;
+            data->private = &module->nw.private;
+            iap->link_down_list = g_slist_prepend(iap->link_down_list, data);
+
+            ILOG_DEBUG("Added link_down %p from '%s' to iap",
+                       module->nw.link_down, module->name);
+          }
+          else
+          {
+            ILOG_INFO("Module '%s' does not have a link_down function",
+                      module->name);
+          }
+
+          break;
+        }
+        case ICD_IAP_STATE_LINK_POST_UP:
+        {
+          ILOG_INFO("module '%s' link_post_up callback", module->name);
+
+          if (module->nw.link_pre_down)
+          {
+            struct icd_iap_disconnect_data *data =
+                g_new0(struct icd_iap_disconnect_data, 1);
+
+            data->function = module->nw.link_pre_down;
+            data->private = &module->nw.private;
+            iap->link_pre_down_list =
+                g_slist_prepend(iap->link_pre_down_list, data);
+            ILOG_DEBUG("Added link_pre_down %p from '%s' to iap",
+                       module->nw.link_pre_down, module->name);
+          }
+          else
+          {
+            ILOG_DEBUG("Module '%s' does not have a link_pre_down function",
+                       module->name);
+          }
+
+          break;
+        }
+        case ICD_IAP_STATE_IP_UP:
+        {
+          ILOG_INFO("module '%s' ip_up callback", module->name);
+
+          if (module->nw.ip_down)
+          {
+            struct icd_iap_disconnect_data *data =
+                g_new0(struct icd_iap_disconnect_data, 1);
+
+            data->function = module->nw.ip_down;
+            data->private = &module->nw.private;
+            iap->ip_down_list = g_slist_prepend(iap->ip_down_list, data);
+
+            ILOG_DEBUG("Added ip_down %p from '%s' to iap", module->nw.ip_down,
+                       module->name);
+          }
+          else
+          {
+            ILOG_DEBUG("Module '%s' does not have an ip_down function",
+                       module->name);
+          }
+
+          break;
+        }
+        case ICD_IAP_STATE_SRV_UP:
+        {
+          ILOG_INFO("service module connect callback");
+          break;
+        }
+        default:
+        {
+          ILOG_ERR("State %d does not add any _down functions", iap->state);
+          break;
+        }
+      }
+
+      if (status == ICD_NW_SUCCESS_NEXT_LAYER)
+      {
+        ILOG_INFO("'%s' requests ICd to start with next level",
+                  module ? module->name : "srv provider");
+
+        if (iap->state == ICD_IAP_STATE_LINK_UP ||
+            iap->state == ICD_IAP_STATE_LINK_POST_UP)
+        {
+          icd_iap_modules_reset(iap);
+          iap->state++;
+        }
+      }
+      else
+        ILOG_INFO("checking for same layer _up functions in other modules");
+
+      icd_iap_module_next(iap);
+      break;
+    }
+    case ICD_NW_RESTART:
+    {
+      icd_iap_restart(iap, ICD_NW_LAYER_ALL);
+      break;
+    }
+    case ICD_NW_TOO_MANY_CONNECTIONS:
+    {
+      ILOG_INFO("iap %p ICD_NW_TOO_MANY_CONNECTIONS reported by '%s', %p",
+                iap, module ? module->name : "srv provider", module);
+      iap->busy = module;
+      icd_iap_disconnect_module(iap);
+      break;
+    }
+    case ICD_NW_ERROR_USER_ACTION_DONE:
+    {
+      ILOG_INFO("ICD_NW_ERROR_USER_ACTION_DONE requested for iap %p by '%s' with error '%s'",
+                iap, module ? module->name : "srv provider", err_str);
+
+      iap->user_interaction_done = TRUE;
+      g_free(iap->err_str);
+      iap->err_str = g_strdup(err_str);
+      icd_iap_disconnect_module(iap);
+      break;
+    }
+    case ICD_NW_RESTART_IP:
+    {
+      icd_iap_restart(iap, ICD_NW_LAYER_IP);
+      break;
+    }
+    case ICD_NW_RESTART_LINK_POST:
+    {
+      icd_iap_restart(iap, ICD_NW_LAYER_LINK_POST);
+      break;
+    }
+    case ICD_NW_RESTART_LINK:
+    {
+      icd_iap_restart(iap, ICD_NW_LAYER_LINK);
+      break;
+    }
+    default:
+    {
+      if (iap->err_str)
+        ILOG_INFO("IAP already has error set, ignoring given '%s'", err_str);
+      else if (err_str)
+      {
+        iap->err_str = g_strdup(err_str);
+        ILOG_INFO("IAP reports error '%s'", err_str);
+      }
+      else
+      {
+        iap->err_str = g_strdup(ICD_DBUS_ERROR_NETWORK_ERROR);
+        ILOG_INFO("IAP reports error, but error string NULL, set to '%s'",
+                  iap->err_str);
+      }
+
+      icd_iap_disconnect_module(iap);
+      break;
+    }
+  }
+}
 
 static void
 icd_iap_link_post_up_cb(const enum icd_nw_status status, const gchar *err_str,
@@ -1052,7 +1252,7 @@ icd_iap_link_post_up_cb(const enum icd_nw_status status, const gchar *err_str,
         }
       }
 
-      icd_iap_up_callback(iap, err_str, status);
+      icd_iap_up_callback(status, err_str, iap);
     }
     else
     {
@@ -1136,7 +1336,7 @@ icd_iap_link_up_cb(const enum icd_nw_status status, const gchar *err_str,
                    interface_name);
       }
 
-      icd_iap_up_callback(iap, err_str, status);
+      icd_iap_up_callback(status, err_str, iap);
     }
     else if (iap->state > ICD_IAP_STATE_SCRIPT_POST_DOWN)
       ILOG_CRIT("iap is in invalid state %d when calling link_up", iap->state);

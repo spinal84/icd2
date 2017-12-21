@@ -86,6 +86,8 @@ struct icd_dbus_api_foreach_data {
   icd_dbus_api_foreach_send_fn send_fn;
 };
 
+static DBusHandlerResult icd_dbus_api_state_req(DBusConnection *conn, DBusMessage *msg, void *user_data);
+
 static gboolean
 icd_dbus_api_foreach_iap_req(DBusMessage *message,
                              struct icd_dbus_api_foreach_data *foreach_data);
@@ -594,9 +596,9 @@ static const struct icd_dbus_mcall_table icd_dbus_api_mcalls[] = {
  {ICD_DBUS_API_CONNECT_REQ, "ua(sussuay)", "", icd_dbus_api_connect_req},
  {ICD_DBUS_API_SELECT_REQ, "u", "", icd_dbus_api_select_req},
  {ICD_DBUS_API_DISCONNECT_REQ, "usussuay", "", icd_dbus_api_disconnect_req},
- {ICD_DBUS_API_DISCONNECT_REQ, "u", "", icd_dbus_api_disconnect_req},
+ {ICD_DBUS_API_DISCONNECT_REQ, "u", "", icd_dbus_api_disconnect_req},*/
  {ICD_DBUS_API_STATE_REQ, "sussuay", "u", icd_dbus_api_state_req},
- {ICD_DBUS_API_STATE_REQ, "", "u", icd_dbus_api_state_req},*/
+ {ICD_DBUS_API_STATE_REQ, "", "u", icd_dbus_api_state_req},
  {ICD_DBUS_API_STATISTICS_REQ, "sussuay", "u", icd_dbus_api_statistics_req},
  {ICD_DBUS_API_STATISTICS_REQ, "", "u", icd_dbus_api_statistics_req},
  {ICD_DBUS_API_ADDRINFO_REQ, "sussuay", "u", icd_dbus_api_addrinfo_req},

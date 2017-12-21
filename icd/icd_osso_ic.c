@@ -139,7 +139,8 @@ icd_osso_ic_make_request(struct icd_request *merge_request,
   struct icd_request *request;
   gchar *network_type = NULL;
 
-  if (strcmp("[ANY]", requested_iap) && strcmp("[ASK]", requested_iap))
+  if (strcmp(OSSO_IAP_ANY, requested_iap) &&
+      strcmp(OSSO_IAP_ASK, requested_iap))
   {
     network_type = icd_osso_ic_get_type(requested_iap);
 
@@ -503,12 +504,120 @@ icd_osso_ic_ipinfo(DBusMessage *method_call, void *user_data)
   return NULL;
 }
 
+static DBusMessage *
+icd_osso_ic_disconnect(DBusMessage *method_call, void *user_data)
+{
+  gchar *network_type;
+  struct icd_request *request;
+  DBusMessage *message;
+  gchar *iap_name;
+
+  dbus_message_get_args(method_call, NULL,
+                        DBUS_TYPE_STRING, &iap_name,
+                        DBUS_TYPE_INVALID);
+
+  network_type = icd_osso_ic_get_type(iap_name);
+  request = icd_request_find_by_iap(network_type,  ICD_NW_ATTR_IAPNAME,
+                                    iap_name);
+
+  if (request)
+  {
+    const char *sender;
+    struct icd_tracking_info *track;
+
+    g_free(network_type);
+    sender = dbus_message_get_sender(method_call);
+    track = icd_tracking_info_find(sender);
+
+    if (track)
+    {
+      if (!icd_tracking_info_update(track, NULL, method_call))
+      {
+        icd_request_tracking_info_add(
+              request,
+              icd_tracking_info_new(ICD_TRACKING_INFO_ICD,
+                                    dbus_message_get_sender(method_call),
+                                    method_call));
+      }
+
+      icd_request_cancel(request, 0);
+      message = NULL;
+    }
+    else
+    {
+      ILOG_ERR("dbus user '%s' has not requested '%s'",
+               dbus_message_get_sender(method_call), iap_name);
+
+      message = dbus_message_new_error(method_call,
+                                       ICD_DBUS_ERROR_INVALID_IAP,
+                                       "You have not connected to that IAP");
+    }
+  }
+  else
+  {
+    ILOG_ERR("no such IAP '%s' with type '%s'", iap_name, network_type);
+    g_free(network_type);
+    message = dbus_message_new_error(method_call,
+                                     ICD_DBUS_ERROR_INVALID_IAP,
+                                     "IAP not found in gconf");
+  }
+
+  return message;
+}
+
+static DBusMessage *
+icd_osso_ic_activate(DBusMessage *method_call, void *user_data)
+{
+  if (dbus_message_get_type(method_call) == DBUS_MESSAGE_TYPE_METHOD_CALL)
+  {
+    DBusMessage *message;
+    gchar *requested_iap;
+    DBusError error;
+    struct icd_request *request;
+
+    dbus_error_init(&error);
+    dbus_message_get_args(method_call, &error,
+                          DBUS_TYPE_STRING, &requested_iap,
+                          DBUS_TYPE_INVALID);
+    dbus_error_free(&error);
+    request = icd_request_find(NULL, 0, OSSO_IAP_ASK);
+
+    if (*requested_iap)
+    {
+      message = icd_osso_ic_make_request(request, NULL, method_call,
+                                         requested_iap,
+                                         ICD_POLICY_ATTRIBUTE_CONN_UI);
+
+      if (message)
+        return message;
+    }
+    else
+    {
+      ILOG_DEBUG("cancel pressed in UI");
+
+      if (request)
+      {
+        icd_request_send_nack(request);
+        icd_request_cancel(request, ICD_POLICY_ATTRIBUTE_CONN_UI);
+      }
+    }
+
+    return dbus_message_new_method_return(method_call);
+  }
+
+  ILOG_ERR("message to 'activate' is not a method call");
+
+  return dbus_message_new_error(method_call,
+                                DBUS_ERROR_NOT_SUPPORTED,
+                                "Message is not a method call");
+}
+
 /** OSSO IC API method call handlers */
 static struct icd_osso_ic_handler icd_osso_ic_htable[] = {
-/*  {ICD_DBUS_INTERFACE, ICD_ACTIVATE_REQ, "s", icd_osso_ic_activate},
-  {ICD_DBUS_INTERFACE, ICD_SHUTDOWN_REQ, "", icd_osso_ic_shutdown},*/
+  {ICD_DBUS_INTERFACE, ICD_ACTIVATE_REQ, "s", icd_osso_ic_activate},
+/*  {ICD_DBUS_INTERFACE, ICD_SHUTDOWN_REQ, "", icd_osso_ic_shutdown},*/
   {ICD_DBUS_INTERFACE, ICD_CONNECT_REQ, "su", icd_osso_ic_connect},
-  /*{ICD_DBUS_INTERFACE, ICD_DISCONNECT_REQ, "s", icd_osso_ic_disconnect},*/
+  {ICD_DBUS_INTERFACE, ICD_DISCONNECT_REQ, "s", icd_osso_ic_disconnect},
   {ICD_DBUS_INTERFACE, ICD_GET_IPINFO_REQ, "", icd_osso_ic_ipinfo},
   /*{ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "", icd_osso_ic_connstats},
   {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "s", icd_osso_ic_connstats},*/

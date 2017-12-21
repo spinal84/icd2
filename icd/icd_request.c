@@ -411,7 +411,7 @@ icd_request_connect(struct icd_request *request)
           ICD_POLICY_ATTRIBUTE_BACKGROUND |
           ICD_POLICY_ATTRIBUTE_CONNECTIONS_FAILED |
           ICD_POLICY_ATTRIBUTE_NO_INTERACTION,
-          NULL, 0, NULL, NULL, 0, "[ASK]");
+          NULL, 0, NULL, NULL, 0, OSSO_IAP_ASK);
     icd_request_merge(request, new_request);
     icd_request_make(new_request);
   }
@@ -694,7 +694,7 @@ disconnected:
             icd_iap_free(iap);
             req = icd_request_new(ICD_POLICY_ATTRIBUTE_NO_INTERACTION |
                                   ICD_POLICY_ATTRIBUTE_BACKGROUND,
-                                  NULL, 0, NULL, NULL, 0, "[ASK]");
+                                  NULL, 0, NULL, NULL, 0, OSSO_IAP_ASK);
             icd_request_merge(request, req);
             icd_request_make(req);
           }

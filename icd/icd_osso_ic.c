@@ -598,12 +598,107 @@ icd_osso_ui_save(DBusMessage *signal, void *user_data)
   return NULL;
 }
 
+static DBusMessage *
+icd_osso_ui_retry(DBusMessage *signal, void *user_data)
+{
+  gchar *network_type = NULL;
+  DBusMessageIter iter;
+  dbus_bool_t retry_this = FALSE;
+  dbus_bool_t retry = FALSE;
+  const gchar *id = NULL;
+  struct icd_request *request;
+  struct icd_request *new_request;
+
+  dbus_message_iter_init(signal, &iter);
+  dbus_message_iter_get_basic(&iter, &id);
+  dbus_message_iter_next(&iter);
+  dbus_message_iter_get_basic(&iter, &retry);
+
+  if (dbus_message_iter_next(&iter))
+    dbus_message_iter_get_basic(&iter, &retry_this);
+
+  if (!strcmp(id, OSSO_IAP_ANY) || !strcmp(id, OSSO_IAP_ASK) )
+  {
+    ILOG_DEBUG("searching for meta iap '%s'", id);
+    request = icd_request_find(NULL, 0, id);
+  }
+  else
+  {
+    ILOG_DEBUG("searching for normal iap '%s'", id);
+    network_type = icd_osso_ic_get_type(id);
+
+    if (network_type)
+      request = icd_request_find_by_iap(network_type, ICD_NW_ATTR_IAPNAME, id);
+    else
+      request = icd_request_find_by_iap_id(id, TRUE);
+  }
+
+  ILOG_DEBUG("retry from UI: id '%s', retry %d, retry_this %d", id, retry,
+             retry_this);
+
+  if (retry)
+  {
+    if (request && request->state == ICD_REQUEST_WAITING)
+    {
+      GSList *try_iaps;
+
+      if (retry_this)
+      {
+        new_request = request;
+        goto make_req;
+      }
+
+      try_iaps = request->try_iaps;
+
+      if (try_iaps)
+      {
+        struct icd_iap *iap =
+            (struct icd_iap *)g_slist_nth_data(try_iaps, retry_this);
+
+        if (iap)
+        {
+          ILOG_DEBUG("retry from UI: disconnected from %p", iap);
+          icd_status_disconnected(iap, NULL, NULL);
+        }
+      }
+
+      icd_request_free_iaps(request);
+      new_request = icd_request_new(0, NULL, 0, NULL, NULL, 0, OSSO_IAP_ASK);
+    }
+    else
+    {
+      ILOG_WARN("cannot find request %p in state ICD_REQUEST_WAITING for iap '%s', type '%s'",
+                request, id, network_type);
+      new_request = icd_request_new(0, NULL, 0, NULL, NULL, 0, OSSO_IAP_ASK);
+    }
+
+    if (request)
+      icd_request_merge(request, new_request);
+
+make_req:
+    icd_request_make(new_request);
+  }
+  else
+  {
+    ILOG_DEBUG("cancel signalled from retry UI");
+
+    if (request)
+    {
+      icd_request_send_nack(request);
+      icd_request_cancel(request, ICD_POLICY_ATTRIBUTE_CONN_UI);
+    }
+  }
+
+  g_free(network_type);
+
+  return NULL;
+}
+
 /** UI signal handlers */
 static struct icd_osso_ic_handler icd_osso_ui_htable[] = {
-  {ICD_UI_DBUS_INTERFACE, ICD_UI_DISCONNECT_SIG, "b",
-   icd_osso_ui_disconnect},
-/*  {ICD_UI_DBUS_INTERFACE, ICD_UI_RETRY_SIG, "sb", icd_osso_ui_retry},
-  {ICD_UI_DBUS_INTERFACE, ICD_UI_RETRY_SIG, "sbb", icd_osso_ui_retry},*/
+  {ICD_UI_DBUS_INTERFACE, ICD_UI_DISCONNECT_SIG, "b", icd_osso_ui_disconnect},
+  {ICD_UI_DBUS_INTERFACE, ICD_UI_RETRY_SIG, "sb", icd_osso_ui_retry},
+  {ICD_UI_DBUS_INTERFACE, ICD_UI_RETRY_SIG, "sbb", icd_osso_ui_retry},
   {ICD_UI_DBUS_INTERFACE, ICD_UI_SAVE_SIG, "ss", icd_osso_ui_save},
   {NULL}
 };

@@ -612,10 +612,94 @@ icd_osso_ic_activate(DBusMessage *method_call, void *user_data)
                                 "Message is not a method call");
 }
 
+static void
+icd_osso_ic_ui_pending(DBusPendingCall *pending, void *user_data)
+{
+  struct icd_osso_ic_mcall_data *data =
+      (struct icd_osso_ic_mcall_data *)user_data;
+  DBusMessage *reply;
+  gboolean success = FALSE;
+
+  reply = dbus_pending_call_steal_reply(pending);
+
+  if (data->pending_call)
+  {
+    dbus_pending_call_unref(data->pending_call);
+    data->pending_call = NULL;
+  }
+
+  if (dbus_message_get_type(reply) != DBUS_MESSAGE_TYPE_ERROR )
+    success = TRUE;
+
+  if (success)
+    ILOG_DEBUG("'%s' successfully requested from UI", data->mcall_name);
+  else
+  {
+    ILOG_DEBUG("'%s' requested from UI but returned: '%s'", data->mcall_name,
+               dbus_message_get_error_name(reply));
+  }
+
+  if (data->cb)
+  {
+    ILOG_DEBUG("icd UI callback %p called with success '%d' user data %p",
+               data->cb, success, data->user_data);
+    data->cb(success, data->user_data);
+  }
+  else
+    ILOG_DEBUG("icd UI callback NULL");
+
+  g_free(data);
+}
+
+static DBusMessage *
+icd_osso_ic_shutdown(DBusMessage *request, void *user_data)
+{
+  DBusMessage *mcall;
+  DBusMessage *message;
+  DBusError error;
+
+  dbus_error_init(&error);
+  mcall = dbus_message_new_method_call(ICD_UI_DBUS_SERVICE,
+                                       ICD_UI_DBUS_PATH,
+                                       ICD_UI_DBUS_INTERFACE,
+                                       ICD_UI_SHOW_DISCONNDLG_REQ);
+  if (mcall)
+  {
+    struct icd_osso_ic_mcall_data *data =
+        g_new0(struct icd_osso_ic_mcall_data, 1);
+
+    data->mcall_name = ICD_UI_SHOW_DISCONNDLG_REQ;
+    data->pending_call = icd_dbus_send_system_mcall(mcall,
+                                                    ICD_OSSO_UI_REQUEST_TIMEOUT,
+                                                    icd_osso_ic_ui_pending,
+                                                    data);
+
+    if (!data->pending_call)
+    {
+      ILOG_WARN("icd UI '%s' mcall could not be sent, user has to retry pressing disconnect",
+                data->mcall_name);
+      g_free(data);
+    }
+
+    dbus_message_unref(mcall);
+    message = dbus_message_new_method_return(request);
+  }
+  else
+  {
+    dbus_error_free(&error);
+    ILOG_ERR("Could not create show_disconnect_dlg method call");
+    message = dbus_message_new_error(
+                request,
+                "org.freedesktop.DBus.Error.NoMemory",
+                "Could not create show_disconnect_dlg method call");
+  }
+  return message;
+}
+
 /** OSSO IC API method call handlers */
 static struct icd_osso_ic_handler icd_osso_ic_htable[] = {
   {ICD_DBUS_INTERFACE, ICD_ACTIVATE_REQ, "s", icd_osso_ic_activate},
-/*  {ICD_DBUS_INTERFACE, ICD_SHUTDOWN_REQ, "", icd_osso_ic_shutdown},*/
+  {ICD_DBUS_INTERFACE, ICD_SHUTDOWN_REQ, "", icd_osso_ic_shutdown},
   {ICD_DBUS_INTERFACE, ICD_CONNECT_REQ, "su", icd_osso_ic_connect},
   {ICD_DBUS_INTERFACE, ICD_DISCONNECT_REQ, "s", icd_osso_ic_disconnect},
   {ICD_DBUS_INTERFACE, ICD_GET_IPINFO_REQ, "", icd_osso_ic_ipinfo},
@@ -995,45 +1079,6 @@ icd_osso_ic_send_nack(GSList *tracking_list)
       l->data = NULL;
     }
   }
-}
-
-static void
-icd_osso_ic_ui_pending(DBusPendingCall *pending, void *user_data)
-{
-  struct icd_osso_ic_mcall_data *data =
-      (struct icd_osso_ic_mcall_data *)user_data;
-  DBusMessage *reply;
-  gboolean success = FALSE;
-
-  reply = dbus_pending_call_steal_reply(pending);
-
-  if (data->pending_call)
-  {
-    dbus_pending_call_unref(data->pending_call);
-    data->pending_call = NULL;
-  }
-
-  if (dbus_message_get_type(reply) != DBUS_MESSAGE_TYPE_ERROR )
-    success = TRUE;
-
-  if (success)
-    ILOG_DEBUG("'%s' successfully requested from UI", data->mcall_name);
-  else
-  {
-    ILOG_DEBUG("'%s' requested from UI but returned: '%s'", data->mcall_name,
-               dbus_message_get_error_name(reply));
-  }
-
-  if (data->cb)
-  {
-    ILOG_DEBUG("icd UI callback %p called with success '%d' user data %p",
-               data->cb, success, data->user_data);
-    data->cb(success, data->user_data);
-  }
-  else
-    ILOG_DEBUG("icd UI callback NULL");
-
-  g_free(data);
 }
 
 void

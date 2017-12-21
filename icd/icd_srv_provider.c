@@ -777,3 +777,66 @@ icd_srv_provider_has_next(struct icd_iap *iap)
 
   return FALSE;
 }
+
+static void
+icd_srv_provider_connect_cb(enum icd_srv_status status, const gchar *err_str,
+                            gpointer connect_cb_token)
+{
+
+  struct icd_iap *iap = (struct icd_iap *)connect_cb_token;
+
+  if (iap)
+  {
+    icd_srv_provider_connect_cb_fn connect_cb =
+        (icd_srv_provider_connect_cb_fn)iap->srv_connect_cb;
+
+    if (connect_cb)
+      connect_cb(status, err_str, iap->srv_connect_cb_user_data);
+
+    iap->srv_connect_cb_user_data = NULL;
+    iap->srv_connect_cb = NULL;
+  }
+  else
+    ILOG_ERR("srv provider connecte cb returned NULL iap");
+}
+
+gboolean
+icd_srv_provider_connect(struct icd_iap *iap, icd_srv_provider_connect_cb_fn cb,
+                         gpointer user_data)
+{
+  struct icd_context *icd_ctx = icd_context_get();
+  struct icd_srv_module *module;
+
+  if (!cb)
+  {
+    ILOG_ERR("srv provider connect cb cannot be NULL");
+    return FALSE;
+  }
+
+  if (!icd_srv_provider_has_next(iap))
+  {
+    ILOG_INFO("srv provider connect already in progress for iap %p", iap);
+    return FALSE;
+  }
+
+  module = (struct icd_srv_module *)g_hash_table_lookup(
+        icd_ctx->srv_type_to_srv_module, iap->connection.service_type);
+
+  if (!module)
+  {
+    ILOG_ERR("srv type '%s' unknown", iap->connection.service_type);
+
+    return FALSE;
+
+  }
+
+  iap->srv_connect_cb = cb;
+  iap->srv_connect_cb_user_data = user_data;
+  module->srv.connect(iap->connection.service_type,
+                      iap->connection.service_attrs, iap->connection.service_id,
+                      iap->connection.network_type,
+                      iap->connection.network_attrs, iap->connection.network_id,
+                      iap->interface_name, icd_srv_provider_connect_cb, iap,
+                      &module->srv.private);
+  return TRUE;
+}

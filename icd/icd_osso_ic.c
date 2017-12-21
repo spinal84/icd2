@@ -927,3 +927,56 @@ icd_osso_ic_send_ack(GSList *tracking_list, const gchar *iap_name)
     }
   }
 }
+
+gpointer
+icd_osso_ui_send_save(const gchar *iap_name, icd_osso_ui_cb_fn cb,
+                      gpointer user_data)
+{
+  struct icd_osso_ic_mcall_data *mcall_data;
+  DBusMessage *message;
+  DBusPendingCall *pending_call;
+
+  mcall_data = g_new0(struct icd_osso_ic_mcall_data, 1);
+  mcall_data->cb = cb;
+  mcall_data->user_data = user_data;
+  mcall_data->mcall_name = ICD_UI_SHOW_SAVEDLG_REQ;
+
+  message = dbus_message_new_method_call(ICD_UI_DBUS_SERVICE,
+                                         ICD_UI_DBUS_PATH,
+                                         ICD_UI_DBUS_INTERFACE,
+                                         ICD_UI_SHOW_SAVEDLG_REQ);
+  if (message)
+  {
+    if (dbus_message_append_args(message,
+                                 DBUS_TYPE_STRING, &iap_name,
+                                 DBUS_TYPE_INVALID))
+    {
+      pending_call = icd_dbus_send_system_mcall(message,
+                                                ICD_OSSO_UI_REQUEST_TIMEOUT,
+                                                icd_osso_ic_ui_pending,
+                                                mcall_data);
+      mcall_data->pending_call = pending_call;
+
+      if (pending_call)
+      {
+        dbus_message_unref(message);
+        return mcall_data;
+      }
+
+      ILOG_WARN("icd UI mcall '%s' could not be sent", mcall_data->mcall_name);
+    }
+    else
+      ILOG_ERR("could not append args to '%s' request", mcall_data->mcall_name);
+
+    dbus_message_unref(message);
+  }
+  else
+    ILOG_ERR("could not create '%s' request", mcall_data->mcall_name);
+
+  if (mcall_data->cb)
+    mcall_data->cb(FALSE, mcall_data->user_data);
+
+  g_free(mcall_data);
+
+  return NULL;
+}

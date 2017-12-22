@@ -412,5 +412,5 @@ icd_script_notify_pid(const pid_t pid, const gint exit_value)
 void
 icd_script_add_env_vars (struct icd_iap *iap, gchar **env_vars)
 {
-
+  assert(0);
 }

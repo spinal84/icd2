@@ -696,6 +696,239 @@ icd_osso_ic_shutdown(DBusMessage *request, void *user_data)
   return message;
 }
 
+static gpointer
+icd_osso_ic_connstats_get_first(struct icd_request *request, gpointer user_data)
+{
+  struct icd_iap *iap = NULL;
+
+  if (request->state == ICD_REQUEST_SUCCEEDED && request->try_iaps)
+  {
+    ILOG_DEBUG("querying statistics from request %p", request);
+    iap = (struct icd_iap *)request->try_iaps->data;
+
+    if (!iap)
+    {
+      ILOG_CRIT("request %p in ICD_REQUEST_SUCCEEDED state but NULL iap",
+                request);
+    }
+  }
+  else
+    ILOG_DEBUG("request %p not in ICD_REQUEST_SUCCEEDED state", request);
+
+  return iap;
+}
+
+static void
+icd_osso_ic_connstats_ip_cb(const gpointer ip_stats_cb_token,
+                            const gchar *network_type,
+                            const guint network_attrs, const gchar *network_id,
+                            guint time_active, guint rx_bytes, guint tx_bytes)
+{
+  struct icd_osso_ic_stats_data *stats =
+      (struct icd_osso_ic_stats_data *)ip_stats_cb_token;
+  struct icd_iap *iap = icd_iap_find(network_type, network_attrs, network_id);
+  DBusMessage *message;
+  dbus_uint32_t zero = 0;
+
+  if (iap)
+  {
+    if (stats)
+    {
+      if (time_active)
+        stats->time_active = time_active;
+
+      if (tx_bytes || rx_bytes)
+      {
+        stats->rx_bytes = rx_bytes;
+        stats->tx_bytes = tx_bytes;
+      }
+
+      message = dbus_message_new_method_return(stats->request);
+
+      if (message &&
+          dbus_message_append_args(message,
+                                   DBUS_TYPE_STRING, &network_id,
+                                   DBUS_TYPE_UINT32, &stats->time_active,
+                                   DBUS_TYPE_UINT32, &stats->dB,
+                                   DBUS_TYPE_UINT32, &zero,
+                                   DBUS_TYPE_UINT32, &zero,
+                                   DBUS_TYPE_UINT32, &stats->rx_bytes,
+                                   DBUS_TYPE_UINT32, &stats->tx_bytes,
+                                   DBUS_TYPE_INVALID))
+      {
+        ILOG_DEBUG("returning statistics for iap %p: %u, %u, %u, %u, %u, %u",
+                   iap, stats->time_active, stats->signal, zero,  zero,
+                   stats->rx_bytes, stats->tx_bytes);
+      }
+      else
+      {
+        if (message)
+          dbus_message_unref(message);
+
+        message = dbus_message_new_error(
+              stats->request, DBUS_ERROR_NO_MEMORY,
+              "Could not create get_statistics method call reply");
+      }
+
+      if (message)
+      {
+        icd_dbus_send_system_msg(message);
+        dbus_message_unref(message);
+      }
+
+      dbus_message_unref(stats->request);
+      g_free(stats->station_id);
+      g_free(stats);
+    }
+  }
+  else if (stats)
+  {
+    icd_osso_ic_connstats_error(stats->request);
+    dbus_message_unref(stats->request);
+    g_free(stats->station_id);
+    g_free(stats);
+  }
+  else
+    ILOG_ERR("ip stats is NULL");
+
+  if (!iap)
+  {
+    ILOG_WARN("ip stats cannot find iap %s/%0x/%s anymore, but that's ok",
+              network_type, network_attrs, network_id);
+  }
+}
+
+static void
+icd_osso_ic_connstats_link_post_cb(const gpointer link_post_stats_cb_token,
+                                   const gchar *network_type,
+                                   const guint network_attrs,
+                                   const gchar *network_id, guint time_active,
+                                   guint rx_bytes, guint tx_bytes)
+{
+  struct icd_osso_ic_stats_data *stats =
+      (struct icd_osso_ic_stats_data *)link_post_stats_cb_token;
+  struct icd_iap *iap = icd_iap_find(network_type, network_attrs, network_id);
+
+  if (iap)
+  {
+    if (stats)
+    {
+      if (time_active)
+        stats->time_active = time_active;
+
+      if (tx_bytes || rx_bytes)
+      {
+        stats->rx_bytes = rx_bytes;
+        stats->tx_bytes = tx_bytes;
+      }
+
+      icd_iap_get_ip_stats(iap, icd_osso_ic_connstats_ip_cb, stats);
+    }
+  }
+  else if (stats)
+  {
+    icd_osso_ic_connstats_error(stats->request);
+    dbus_message_unref(stats->request);
+    g_free(stats->station_id);
+    g_free(stats);
+  }
+  else
+    ILOG_ERR("link post stats is NULL");
+
+  if (!iap)
+  {
+    ILOG_WARN("link post stats cannot find iap %s/%0x/%s anymore, but that's ok",
+              network_type, network_attrs, network_id);
+  }
+}
+
+static void
+icd_osso_ic_connstats_link_cb(gpointer link_stats_cb_token,
+                              const gchar *network_type,
+                              const guint network_attrs,
+                              const gchar *network_id, guint time_active,
+                              gint signal, gchar *station_id, gint dB,
+                              guint rx_bytes, guint tx_bytes)
+{
+  struct icd_osso_ic_stats_data *stats =
+      (struct icd_osso_ic_stats_data *)link_stats_cb_token;
+  struct icd_iap *iap = icd_iap_find(network_type, network_attrs, network_id);
+
+  if (iap)
+  {
+    if (stats)
+    {
+      stats->time_active = time_active;
+      stats->signal = signal;
+      stats->dB = dB;
+      stats->rx_bytes = rx_bytes;
+      stats->tx_bytes = tx_bytes;
+      stats->station_id = g_strdup(station_id);;
+      icd_iap_get_link_post_stats(iap, icd_osso_ic_connstats_link_post_cb,
+                                  stats);
+    }
+  }
+  else if (stats)
+  {
+    icd_osso_ic_connstats_error(stats->request);
+    dbus_message_unref(stats->request);
+    g_free(stats->station_id);
+    g_free(stats);
+  }
+  else
+    ILOG_ERR("link stats is NULL");
+
+  if (!iap)
+  {
+    ILOG_WARN("link stats cannot find iap %s/%0x/%s anymore, but that's ok",
+              network_type, network_attrs, network_id);
+  }
+}
+
+static DBusMessage *
+icd_osso_ic_connstats(DBusMessage *method_call, void *user_data)
+{
+  struct icd_iap *iap;
+  gchar *network_id;
+
+  if (!dbus_message_get_args(method_call, NULL,
+                             DBUS_TYPE_STRING, &network_id,
+                             DBUS_TYPE_INVALID))
+  {
+    network_id = NULL;
+  }
+
+  if (!network_id)
+  {
+    ILOG_DEBUG("no arguments, finding any/first iap");
+    iap = (struct icd_iap *)icd_request_foreach(icd_osso_ic_connstats_get_first,
+                                                NULL);
+  }
+  else
+  {
+    gchar *network_type = icd_osso_ic_get_type(network_id);
+    iap = icd_iap_find(network_type, ICD_NW_ATTR_IAPNAME, network_id);
+    g_free(network_type);
+  }
+
+  if (iap)
+  {
+    struct icd_osso_ic_stats_data *stats_data =
+        g_new0(struct icd_osso_ic_stats_data, 1);
+
+    dbus_message_ref(method_call);
+    stats_data->request = method_call;
+    icd_iap_get_link_stats(iap, icd_osso_ic_connstats_link_cb, stats_data);
+  }
+  else
+  {
+    ILOG_INFO("no connection statistics available");
+    icd_osso_ic_connstats_error(method_call);
+  }
+
+  return NULL;
+}
+
 /** OSSO IC API method call handlers */
 static struct icd_osso_ic_handler icd_osso_ic_htable[] = {
   {ICD_DBUS_INTERFACE, ICD_ACTIVATE_REQ, "s", icd_osso_ic_activate},
@@ -703,8 +936,8 @@ static struct icd_osso_ic_handler icd_osso_ic_htable[] = {
   {ICD_DBUS_INTERFACE, ICD_CONNECT_REQ, "su", icd_osso_ic_connect},
   {ICD_DBUS_INTERFACE, ICD_DISCONNECT_REQ, "s", icd_osso_ic_disconnect},
   {ICD_DBUS_INTERFACE, ICD_GET_IPINFO_REQ, "", icd_osso_ic_ipinfo},
-  /*{ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "", icd_osso_ic_connstats},
-  {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "s", icd_osso_ic_connstats},*/
+  {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "", icd_osso_ic_connstats},
+  {ICD_DBUS_INTERFACE, ICD_GET_STATISTICS_REQ, "s", icd_osso_ic_connstats},
   {ICD_DBUS_INTERFACE, ICD_GET_STATE_REQ, "", icd_osso_ic_get_state},
   {ICD_DBUS_INTERFACE, "background_killing_application", "ss",
    icd_osso_ic_bg_killed},

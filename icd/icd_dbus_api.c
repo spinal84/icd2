@@ -703,14 +703,57 @@ icd_dbus_api_disconnect_req(DBusConnection *conn, DBusMessage *msg,
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
+static DBusHandlerResult
+icd_dbus_api_select_req(DBusConnection *conn, DBusMessage *msg, void *user_data)
+{
+  guint policy_attrs;
+  const char *sender;
+  DBusMessage *message;
+  DBusMessageIter iter;
+  dbus_uint32_t connection_flags;
+
+  dbus_message_iter_init(msg, &iter);
+  dbus_message_iter_get_basic(&iter, &connection_flags);
+
+  if (connection_flags == ICD_CONNECTION_FLAG_NONE)
+    policy_attrs = ICD_POLICY_ATTRIBUTE_BACKGROUND;
+  else if (connection_flags == ICD_CONNECTION_FLAG_UI_EVENT)
+    policy_attrs = ICD_POLICY_ATTRIBUTE_CONN_UI;
+  else
+    policy_attrs = 0;
+
+  sender = dbus_message_get_sender(msg);
+  message = dbus_message_new_method_return(msg);
+
+  if ( message )
+  {
+    struct icd_request *request;
+    struct icd_tracking_info *track;
+
+    icd_dbus_send_system_msg(message);
+    dbus_message_unref(message);
+    request =
+        icd_request_new(policy_attrs, NULL, 0, NULL, NULL, 0, OSSO_IAP_ASK);
+    track = icd_tracking_info_new(ICD_TRACKING_INFO_ICD2, sender, NULL);
+    icd_request_tracking_info_add(request, track);
+    icd_request_make(request);
+    return DBUS_HANDLER_RESULT_HANDLED;
+  }
+
+  ILOG_ERR("dbus api out of memory when creating select connection reply to '%s'",
+           sender);
+
+  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+}
+
 /** method calls provided */
 static const struct icd_dbus_mcall_table icd_dbus_api_mcalls[] = {
  /*{ICD_DBUS_API_SCAN_REQ, "u", "as", icd_dbus_api_scan_req},
  {ICD_DBUS_API_SCAN_REQ, "uas", "as", icd_dbus_api_scan_req},*/
  {ICD_DBUS_API_SCAN_CANCEL, "", "", icd_dbus_api_scan_cancel},
  /*{ICD_DBUS_API_CONNECT_REQ, "u", "", icd_dbus_api_connect_req},
- {ICD_DBUS_API_CONNECT_REQ, "ua(sussuay)", "", icd_dbus_api_connect_req},
- {ICD_DBUS_API_SELECT_REQ, "u", "", icd_dbus_api_select_req},*/
+ {ICD_DBUS_API_CONNECT_REQ, "ua(sussuay)", "", icd_dbus_api_connect_req},*/
+ {ICD_DBUS_API_SELECT_REQ, "u", "", icd_dbus_api_select_req},
  {ICD_DBUS_API_DISCONNECT_REQ, "usussuay", "", icd_dbus_api_disconnect_req},
  {ICD_DBUS_API_DISCONNECT_REQ, "u", "", icd_dbus_api_disconnect_req},
  {ICD_DBUS_API_STATE_REQ, "sussuay", "u", icd_dbus_api_state_req},

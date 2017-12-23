@@ -20,7 +20,8 @@ icd_status_send_signal(const char *network_type, const char *id,
   }
   else
   {
-    msg = dbus_message_new_signal("/com/nokia/icd", "com.nokia.icd",
+    msg = dbus_message_new_signal(ICD_DBUS_PATH,
+                                  ICD_DBUS_INTERFACE,
                                   ICD_STATUS_CHANGED_SIG);
     if (msg)
     {
@@ -38,17 +39,16 @@ icd_status_send_signal(const char *network_type, const char *id,
                                    DBUS_TYPE_INVALID) &&
           icd_dbus_send_system_msg(msg))
       {
-        ILOG_INFO("'%s' type '%s' " ICD_STATUS_CHANGED_SIG
-                  "with status %s, '%s' sent to '%s'", id, network_type,
-                  state_name, uierr, dbus_dest);
+        ILOG_INFO("'%s' type '%s' ICD_STATUS_CHANGED_SIG with status %s, '%s' sent to '%s'",
+                  id, network_type, state_name, uierr, dbus_dest);
       }
       else
-        ILOG_CRIT("could not send " ICD_STATUS_CHANGED_SIG);
+        ILOG_CRIT("could not send ICD_STATUS_CHANGED_SIG");
 
       dbus_message_unref(msg);
     }
     else
-      ILOG_CRIT("could not create "ICD_STATUS_CHANGED_SIG" message");
+      ILOG_CRIT("could not create ICD_STATUS_CHANGED_SIG message");
   }
 }
 

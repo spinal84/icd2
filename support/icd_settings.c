@@ -97,7 +97,6 @@ icd_settings_delete(icd_settings_handle handle)
 
       break;
     }
-
   }
 
   icd_backend_gconf_delete(handle);

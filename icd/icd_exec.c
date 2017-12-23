@@ -116,10 +116,10 @@ icd_exec_signal_cb(int sig)
       icd_exec_shutdown(icd_context_get());
       break;
     }
-    case SIGBUS:
+    case SIGUSR1:
       icd_log_nextlevel();
       break;
-    case SIGSTOP:
+    case SIGCHLD:
       while (1)
       {
         struct icd_context *icd_ctx;
@@ -180,8 +180,8 @@ main(int argc, char **argv)
   }
   else if (icd_pid_write(PIDFILE))
   {
-    rv = icd_signal_init(icd_exec_signal_cb, SIGINT, SIGTERM, SIGBUS, SIGSYS,
-                         SIGSTOP, SIGHUP, -1);
+    rv = icd_signal_init(icd_exec_signal_cb, SIGINT, SIGTERM, SIGUSR1, SIGUSR2,
+                         SIGCHLD, SIGHUP, -1);
     if (!rv)
     {
       icd_idle_timer_init(icd_ctx);

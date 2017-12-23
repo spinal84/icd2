@@ -311,11 +311,11 @@ icd_policy_api_run_async(struct icd_policy_request *req,
 
     async_data->module_list = async_data->module_list->next;
 
-    if (!async_data->call_policy(module, req, async_data))
-      return FALSE;
+    if (async_data->call_policy(module, req, async_data))
+      return TRUE;
   }
 
-  return TRUE;
+  return FALSE;
 }
 
 static void

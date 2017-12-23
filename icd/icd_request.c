@@ -452,6 +452,7 @@ icd_request_connect_iaps(enum icd_policy_status status,
   {
     if (g_slist_length(request->try_iaps) > 1)
       request->multi_iaps = TRUE;
+
     icd_request_connect(request);
   }
 }

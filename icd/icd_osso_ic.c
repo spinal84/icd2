@@ -65,16 +65,6 @@ struct icd_osso_ic_stats_data {
   guint tx_bytes;
 };
 
-/**
- * @brief Callback function called when a UI retry or save request has
- * completed
- *
- * @param success TRUE on success, FALSE on failure
- * @param user_data user data passed to retry or save function
- *
- */
-typedef void(* icd_osso_ui_cb_fn)(gboolean success, gpointer user_data) ;
-
 /** Callback data passed for UI method calls */
 struct icd_osso_ic_mcall_data {
   /** pending call, if needed */
@@ -1240,14 +1230,14 @@ icd_osso_ic_init(struct icd_context *icd_ctx)
   if (!icd_dbus_connect_system_bcast_signal(ICD_UI_DBUS_INTERFACE,
                                             icd_osso_ui_signal, NULL, NULL))
   {
-    ILOG_CRIT("could not connect to '" ICD_DBUS_PATH "'");
+    ILOG_CRIT("could not connect to '" ICD_UI_DBUS_INTERFACE "'");
 
     icd_dbus_unregister_system_service(ICD_DBUS_PATH,
                                        ICD_DBUS_SERVICE);
     return FALSE;
   }
 
-  ILOG_DEBUG("listening for '" ICD_DBUS_PATH "' messages ");
+  ILOG_DEBUG("listening for '" ICD_UI_DBUS_INTERFACE "' messages ");
 
   return TRUE;
 }

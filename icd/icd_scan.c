@@ -866,8 +866,6 @@ icd_scan_network(struct icd_network_module *module, const gchar *network_type)
       ILOG_INFO("scan start for type '%s'", (const gchar *)l->data);
       icd_status_scan_start((const gchar *)l->data);
     }
-
-    l = l->next;
   }
 
   module->scan_progress = TRUE;

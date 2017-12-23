@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <signal.h>
+#include <errno.h>
 
 #include "icd_signal.h"
 #include "icd_exec.h"
@@ -87,9 +88,9 @@ icd_signal_init(icd_signal_handler_fn signal_handler, ...)
 
   while (sig != -1)
   {
-    if (signal(sig, icd_signal_handler) == (__sighandler_t)-1)
+    if (signal(sig, icd_signal_handler) == SIG_ERR)
     {
-      ILOG_ERR("Failed to setup signal handler for signal %d", sig);
+      ILOG_ERR("Failed to setup signal handler for signal %d[%d]", sig, errno);
       status = EXIT_SIGNAL_HANDLERS_FAILED;
       goto out;
     }

@@ -746,25 +746,6 @@ icd_dbus_api_select_req(DBusConnection *conn, DBusMessage *msg, void *user_data)
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
-/** method calls provided */
-static const struct icd_dbus_mcall_table icd_dbus_api_mcalls[] = {
- /*{ICD_DBUS_API_SCAN_REQ, "u", "as", icd_dbus_api_scan_req},
- {ICD_DBUS_API_SCAN_REQ, "uas", "as", icd_dbus_api_scan_req},*/
- {ICD_DBUS_API_SCAN_CANCEL, "", "", icd_dbus_api_scan_cancel},
- /*{ICD_DBUS_API_CONNECT_REQ, "u", "", icd_dbus_api_connect_req},
- {ICD_DBUS_API_CONNECT_REQ, "ua(sussuay)", "", icd_dbus_api_connect_req},*/
- {ICD_DBUS_API_SELECT_REQ, "u", "", icd_dbus_api_select_req},
- {ICD_DBUS_API_DISCONNECT_REQ, "usussuay", "", icd_dbus_api_disconnect_req},
- {ICD_DBUS_API_DISCONNECT_REQ, "u", "", icd_dbus_api_disconnect_req},
- {ICD_DBUS_API_STATE_REQ, "sussuay", "u", icd_dbus_api_state_req},
- {ICD_DBUS_API_STATE_REQ, "", "u", icd_dbus_api_state_req},
- {ICD_DBUS_API_STATISTICS_REQ, "sussuay", "u", icd_dbus_api_statistics_req},
- {ICD_DBUS_API_STATISTICS_REQ, "", "u", icd_dbus_api_statistics_req},
- {ICD_DBUS_API_ADDRINFO_REQ, "sussuay", "u", icd_dbus_api_addrinfo_req},
- {ICD_DBUS_API_ADDRINFO_REQ, "", "u", icd_dbus_api_addrinfo_req},
- {NULL}
-};
-
 /**
  * @brief Get the dbus api data structure
  *
@@ -813,7 +794,9 @@ icd_dbus_api_scan_result(enum icd_scan_status status,
   dbus_int32_t izero = 0;
   const gchar *empty = "";
 
-  message = dbus_message_new_signal("/com/nokia/icd2", "com.nokia.icd2", "scan_result_sig");
+  message = dbus_message_new_signal(ICD_DBUS_API_PATH,
+                                    ICD_DBUS_API_INTERFACE,
+                                    ICD_DBUS_API_SCAN_SIG);
 
   if (!message)
   {
@@ -885,6 +868,186 @@ out:
 }
 
 /**
+ * @brief Append a the network type of the successfully started network scan to
+ * the iterator position
+ *
+ * @param network_type network type to start scan for
+ * @param scan_start scan helper structure
+ *
+ * @return TRUE on success, FALSE if the scan was not started
+ *
+ * @todo UI designer does not want to have the "scanning" icon blinking in this
+ * case
+ *
+ */
+static gboolean
+icd_dbus_api_scan_append(gchar *network_type,
+                         struct icd_dbus_api_scan_helper *scan_start)
+{
+  gboolean
+      rv = icd_scan_results_request(network_type, scan_start->scan_type == 1,
+                                    icd_dbus_api_scan_result,
+                                    scan_start->dbus_dest);
+  if (rv)
+  {
+    ILOG_INFO("dbus api successfully started '%s' scan for '%s'", network_type,
+              scan_start->dbus_dest);
+
+    dbus_message_iter_append_basic(scan_start->reply_str_iter,
+                                   DBUS_TYPE_STRING, &network_type);
+  }
+
+  return rv;
+}
+
+static gboolean
+icd_dbus_api_scan_all_types(struct icd_network_module *module,
+                            gpointer user_data)
+{
+  if (module->nw.start_search)
+  {
+    GSList *l;
+    struct icd_dbus_api_scan_helper *helper =
+        (struct icd_dbus_api_scan_helper *)user_data;
+
+    for (l = module->network_types; l; l = l->next)
+    {
+      if (l->data)
+        icd_dbus_api_scan_append((gchar *)l->data, helper);
+    }
+  }
+
+  return TRUE;
+}
+
+static DBusHandlerResult
+icd_dbus_api_scan_req(DBusConnection *conn, DBusMessage *msg, void *user_data)
+{
+  const char *sender;
+  GSList *l;
+  DBusMessage *reply;
+  gchar *dbus_dest;
+  struct icd_context *icd_ctx;
+  DBusMessageIter reply_str_iter;
+  DBusMessageIter iter1;
+  DBusMessageIter iter2;
+  DBusMessageIter iter3;
+  struct icd_dbus_api_scan_helper scan_helper;
+  guint scan_type = 0;
+  struct icd_dbus_api_listeners **listeners = icd_dbus_api_listeners_get();
+  DBusMessage *message = dbus_message_new_method_return(msg);
+  gboolean network_type_set = FALSE;
+
+  if (!message)
+    goto error;
+
+  sender = dbus_message_get_sender(msg);
+
+  for (l = (*listeners)->scan_listeners; l; l = l->next)
+  {
+    if (sender)
+    {
+      if (!strcmp((const char *)l->data, sender))
+      {
+        reply = dbus_message_new_error(msg, DBUS_ERROR_LIMITS_EXCEEDED,
+                                       "Scan already started by you");
+
+        if (!reply)
+          return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+
+        goto send_error;
+      }
+    }
+    else
+      ILOG_WARN("icd dbus sender list has NULL item");
+  }
+
+  dbus_message_iter_init_append(message, &iter1);
+
+  if (!dbus_message_iter_open_container(&iter1, DBUS_TYPE_ARRAY,
+                                        DBUS_TYPE_STRING_AS_STRING,
+                                        &reply_str_iter))
+  {
+    goto error;
+  }
+
+  dbus_message_iter_init(msg, &iter3);
+  dbus_message_iter_get_basic(&iter3, &scan_type);
+  dbus_dest = g_strdup(dbus_message_get_sender(msg));
+  (*listeners)->scan_listeners = g_slist_prepend((*listeners)->scan_listeners,
+                                                 dbus_dest);
+  icd_name_owner_add_filter(dbus_dest);
+  scan_helper.reply_str_iter = &reply_str_iter;
+  scan_helper.dbus_dest = dbus_dest;
+  scan_helper.scan_type = scan_type;
+
+  if (dbus_message_iter_next(&iter3) &&
+      dbus_message_iter_get_element_type(&iter3) == DBUS_TYPE_STRING)
+  {
+    dbus_message_iter_recurse(&iter3, &iter2);
+
+    while (dbus_message_iter_get_arg_type(&iter2) == DBUS_TYPE_STRING)
+    {
+      gchar *network_type = NULL;
+
+      dbus_message_iter_get_basic(&iter2, &network_type);
+
+      if (network_type &&  *network_type)
+          network_type_set = TRUE;
+
+      icd_dbus_api_scan_append(network_type, &scan_helper);
+      dbus_message_iter_next(&iter2);
+    }
+  }
+
+  if (!network_type_set)
+  {
+    icd_ctx = icd_context_get();
+    icd_network_api_foreach_module(icd_ctx, icd_dbus_api_scan_all_types,
+                                   &scan_helper);
+  }
+
+  dbus_message_iter_close_container(&iter1, &reply_str_iter);
+  icd_dbus_send_system_msg(message);
+  dbus_message_unref(message);
+
+  return DBUS_HANDLER_RESULT_HANDLED;
+
+error:
+    reply = dbus_message_new_error(msg, DBUS_ERROR_NO_MEMORY,
+                                   "Out of memory when creating reply");
+
+    if (!reply)
+      return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+
+send_error:
+  icd_dbus_send_system_msg(reply);
+  dbus_message_unref(reply);
+
+  return DBUS_HANDLER_RESULT_HANDLED;
+
+}
+
+/** method calls provided */
+static const struct icd_dbus_mcall_table icd_dbus_api_mcalls[] = {
+ {ICD_DBUS_API_SCAN_REQ, "u", "as", icd_dbus_api_scan_req},
+ {ICD_DBUS_API_SCAN_REQ, "uas", "as", icd_dbus_api_scan_req},
+ {ICD_DBUS_API_SCAN_CANCEL, "", "", icd_dbus_api_scan_cancel},
+ /*{ICD_DBUS_API_CONNECT_REQ, "u", "", icd_dbus_api_connect_req},
+ {ICD_DBUS_API_CONNECT_REQ, "ua(sussuay)", "", icd_dbus_api_connect_req},*/
+ {ICD_DBUS_API_SELECT_REQ, "u", "", icd_dbus_api_select_req},
+ {ICD_DBUS_API_DISCONNECT_REQ, "usussuay", "", icd_dbus_api_disconnect_req},
+ {ICD_DBUS_API_DISCONNECT_REQ, "u", "", icd_dbus_api_disconnect_req},
+ {ICD_DBUS_API_STATE_REQ, "sussuay", "u", icd_dbus_api_state_req},
+ {ICD_DBUS_API_STATE_REQ, "", "u", icd_dbus_api_state_req},
+ {ICD_DBUS_API_STATISTICS_REQ, "sussuay", "u", icd_dbus_api_statistics_req},
+ {ICD_DBUS_API_STATISTICS_REQ, "", "u", icd_dbus_api_statistics_req},
+ {ICD_DBUS_API_ADDRINFO_REQ, "sussuay", "u", icd_dbus_api_addrinfo_req},
+ {ICD_DBUS_API_ADDRINFO_REQ, "", "u", icd_dbus_api_addrinfo_req},
+ {NULL}
+};
+
+/**
  * @brief Notify ICd2 D-Bus API when an app goes away
  *
  * @param dbus_dest D-Bus sender id
@@ -920,39 +1083,6 @@ icd_dbus_api_app_exit(const gchar *dbus_dest)
     }
 
     l = next;
-  }
-
-  return rv;
-}
-
-/**
- * @brief Append a the network type of the successfully started network scan to
- * the iterator position
- *
- * @param network_type network type to start scan for
- * @param scan_start scan helper structure
- *
- * @return TRUE on success, FALSE if the scan was not started
- *
- * @todo UI designer does not want to have the "scanning" icon blinking in this
- * case
- *
- */
-static gboolean
-icd_dbus_api_scan_append(gchar *network_type,
-                         struct icd_dbus_api_scan_helper *scan_start)
-{
-  gboolean
-      rv = icd_scan_results_request(network_type, scan_start->scan_type == 1,
-                                    icd_dbus_api_scan_result,
-                                    scan_start->dbus_dest);
-  if (rv)
-  {
-    ILOG_INFO("dbus api successfully started '%s' scan for '%s'", network_type,
-              scan_start->dbus_dest);
-
-    dbus_message_iter_append_basic(scan_start->reply_str_iter,
-                                   DBUS_TYPE_STRING, &network_type);
   }
 
   return rv;
@@ -1482,26 +1612,6 @@ icd_dbus_api_send_ack(GSList *tracklist, struct icd_iap *iap)
                                     iap);
     }
   }
-}
-
-static gboolean
-icd_dbus_api_scan_all_types(struct icd_network_module *module,
-                            gpointer user_data)
-{
-  if (module->nw.start_search)
-  {
-    GSList *l;
-    struct icd_dbus_api_scan_helper *helper =
-        (struct icd_dbus_api_scan_helper *)user_data;
-
-    for (l = module->network_types; l; l = l->next)
-    {
-      if (l->data)
-        icd_dbus_api_scan_append((gchar *)l->data, helper);
-    }
-  }
-
-  return TRUE;
 }
 
 gboolean

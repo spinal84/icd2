@@ -1225,7 +1225,7 @@ icd_osso_ic_init(struct icd_context *icd_ctx)
     return FALSE;
   }
 
-  ILOG_DEBUG("listening on '" ICD_DBUS_SERVICE "'");
+  ILOG_DEBUG("listening on " ICD_DBUS_SERVICE);
 
   if (!icd_dbus_connect_system_bcast_signal(ICD_UI_DBUS_INTERFACE,
                                             icd_osso_ui_signal, NULL, NULL))
@@ -1237,7 +1237,7 @@ icd_osso_ic_init(struct icd_context *icd_ctx)
     return FALSE;
   }
 
-  ILOG_DEBUG("listening for '" ICD_UI_DBUS_INTERFACE "' messages ");
+  ILOG_DEBUG("listening for " ICD_UI_DBUS_INTERFACE " messages ");
 
   return TRUE;
 }

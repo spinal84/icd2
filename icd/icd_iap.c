@@ -1406,15 +1406,15 @@ icd_iap_module_next(struct icd_iap *iap)
     case ICD_IAP_STATE_SCRIPT_PRE_UP:
     case ICD_IAP_STATE_LINK_UP:
     {
-      current_module = iap->current_module;
       iap->state = ICD_IAP_STATE_LINK_UP;
+      current_module = iap->current_module;
 
       if (current_module)
-        iap->current_module = current_module->next;
+        current_module = current_module->next;
       else
-        iap->current_module = iap->network_modules;
+        current_module = iap->network_modules;
 
-      current_module = iap->current_module;
+      iap->current_module = current_module;
 
       while (current_module)
       {

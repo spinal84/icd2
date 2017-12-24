@@ -376,7 +376,7 @@ icd_idle_timer_set(struct icd_iap *iap)
   gchar *key;
   GConfClient *gconf;
   gint timeout;
-  GError *err;
+  GError *err = NULL;
 
   if (iap->idletimer_id)
   {

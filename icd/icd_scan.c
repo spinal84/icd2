@@ -689,13 +689,13 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
   struct icd_scan_cache_list *scan_cache_list;
   struct icd_scan_cache_timeout *scan_cache_timeout;
   enum icd_scan_status scan_status = ICD_SCAN_NEW;
-  struct icd_scan_cache *cache_entry;
+  struct icd_scan_cache *cache_entry = NULL;
   GSList *l;
   guint now;
 
   if (!module)
   {
-    syslog(27, "ICd search_cb_token returned from module is NULL");
+    ILOG_ERR("ICd search_cb_token returned from module is NULL");
     return;
   }
 
@@ -754,9 +754,8 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
         }
       }
     }
-    else if (status == ICD_NW_SEARCH_EXPIRE)
-      return;
-    else
+
+    if (!cache_entry)
     {
       cache_entry = g_new0(struct icd_scan_cache, 1);
       cache_entry->network_name = g_strdup(network_name);

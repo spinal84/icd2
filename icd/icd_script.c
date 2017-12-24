@@ -1,10 +1,10 @@
+#include <stdlib.h>
+#include <signal.h>
+#include <string.h>
 #include <gconf/gconf-client.h>
 #include <osso-ic-gconf.h>
-
-#include <stdlib.h>
-
-#include "icd_script.h"
 #include "icd_log.h"
+#include "icd_script.h"
 
 #define ICD_SCRIPT_MIN_TIMEOUT   1
 #define ICD_SCRIPT_DEFAULT_TIMEOUT   15
@@ -24,11 +24,27 @@
 #define SCRIPT_IAP_TYPE   "ICD_CONNECTION_TYPE"
 #define SCRIPT_PROXY_UNSET   "ICD_PROXY_UNSET"
 
+const gchar const* reserved_env_vars[] = {
+  SCRIPT_ADDRFAM,
+  SCRIPT_IFACE,
+  SCRIPT_LOGICAL,
+
+  SCRIPT_MODE,
+  SCRIPT_PHASE,
+
+  SCRIPT_PATH,
+  SCRIPT_IAP_ID,
+  SCRIPT_IAP_TYPE,
+  NULL
+};
+
 static GSList *script_data = NULL;
 
 #define SETENV(e, v) \
+do {\
   setenv(e, v, 1); \
-  ILOG_DEBUG(e"=%s", v);
+  ILOG_DEBUG(e"=%s", v); \
+} while (0)
 
 struct icd_script_data {
   pid_t pid;
@@ -409,8 +425,97 @@ icd_script_notify_pid(const pid_t pid, const gint exit_value)
   return FALSE;
 }
 
-void
-icd_script_add_env_vars (struct icd_iap *iap, gchar **env_vars)
+static const char *
+icd_script_add_reserved_env_vars(gchar **env_vars, GSList **script_vars)
 {
-  g_assert(0);
+  const char *addrfam = NULL;
+
+  while (*env_vars)
+  {
+    const char **resrvd = reserved_env_vars;
+    gboolean add_it = TRUE;
+
+    while (*resrvd)
+    {
+      size_t len = strlen(*resrvd);
+      const gchar *env_var = *env_vars;
+      const gchar *p;
+
+      if (!strncmp(env_var, *resrvd, len))
+      {
+        p = &env_var[len];
+
+        if (!*p || *p == '=')
+        {
+          add_it = FALSE;
+
+          if (resrvd != reserved_env_vars)
+          {
+            ILOG_DEBUG("script not setting reserved env var '%s' ('%c')",
+                       *resrvd, *p);
+          }
+          else
+          {
+            addrfam = p + 1;
+
+            ILOG_DEBUG("script identifying with ADDRFAM env var value '%s'",
+                       addrfam);
+          }
+        }
+      }
+
+      resrvd++;
+    }
+
+    if (add_it)
+    {
+      ILOG_DEBUG("script adding env var '%s'", *env_vars);
+      *script_vars = g_slist_prepend(*script_vars, g_strdup(*env_vars));
+    }
+
+    env_vars++;
+  }
+
+  return addrfam;
+}
+
+void
+icd_script_add_env_vars(struct icd_iap *iap, gchar **env_vars)
+{
+
+  GSList *l;
+  gboolean updated = FALSE;
+  struct icd_iap_env *env;
+  GSList *script_vars = NULL;
+  const gchar *addrfam =
+      icd_script_add_reserved_env_vars(env_vars, &script_vars);
+
+  for (l = iap->script_env; l; l = l->next)
+  {
+    GSList *env_data = (GSList *)l->data;
+
+    if (env_data)
+    {
+      if (!env_data->data || (addrfam && !strcmp(addrfam, env_data->data)))
+      {
+        env_data->next = g_slist_concat(env_data->next, script_vars);
+
+        ILOG_DEBUG("address family '%s' updated with env vars",
+                   (char *)env_data->data);
+
+        updated = TRUE;
+      }
+    }
+    else
+      ILOG_WARN("script env NULL");
+  }
+
+  if (updated)
+    return;
+
+  env = g_new0(struct icd_iap_env, 1);
+  env->addrfam = g_strdup(addrfam);
+  env->envlist = script_vars;
+  ILOG_DEBUG("address family '%s' added to env", env->addrfam);
+  iap->script_env = g_slist_prepend(iap->script_env, env);
 }

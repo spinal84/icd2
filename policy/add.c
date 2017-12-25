@@ -1,4 +1,4 @@
-#include <policy_api.h>
+#include "policy_api.h"
 
 static void
 icd_policy_add_new_request(struct icd_policy_request *new_request,
@@ -6,7 +6,7 @@ icd_policy_add_new_request(struct icd_policy_request *new_request,
                            icd_policy_request_new_cb_fn policy_done_cb,
                            gpointer policy_token, gpointer *private)
 {
-  icd_policy_nw_add_fn add_network = (*(icd_policy_nw_add_fn)private);
+  icd_policy_nw_add_fn add_network = *private;
 
   if (!(new_request->attrs & ICD_POLICY_ATTRIBUTE_HAS_CONNECTIONS))
   {

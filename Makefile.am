@@ -1,2 +1,2 @@
-SUBDIRS = support icd
+SUBDIRS = support icd policy
 

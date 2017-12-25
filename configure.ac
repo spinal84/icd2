@@ -46,5 +46,6 @@ AC_OUTPUT([
 Makefile
 support/Makefile
 icd/Makefile
+policy/Makefile
 ])
 

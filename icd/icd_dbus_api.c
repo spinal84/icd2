@@ -1028,13 +1028,141 @@ send_error:
 
 }
 
+static DBusHandlerResult
+icd_dbus_api_connect_req(DBusConnection *conn, DBusMessage *msg,
+                         void *user_data)
+{
+  DBusMessageIter iter1;
+  DBusMessageIter iter2;
+  DBusMessageIter iter3;
+  DBusMessageIter iter4;
+  guint policy_attrs;
+  const char *sender;
+  DBusMessage *message;
+  struct icd_request *request = NULL;
+  int len = 0;
+  gchar *network_id = NULL;
+  dbus_uint32_t network_attrs = 0;
+  gchar *network_type = NULL;
+  gchar *service_id = NULL;
+  dbus_uint32_t service_attrs = 0;
+  gchar *service_type = NULL;
+  dbus_uint32_t connection_flags;
+
+  dbus_message_iter_init(msg, &iter1);
+  dbus_message_iter_get_basic(&iter1, &connection_flags);
+
+  if (connection_flags == ICD_CONNECTION_FLAG_NONE)
+  {
+    policy_attrs = ICD_POLICY_ATTRIBUTE_CONN_UI |
+        ICD_POLICY_ATTRIBUTE_BACKGROUND;
+  }
+  else if (connection_flags == ICD_CONNECTION_FLAG_UI_EVENT)
+    policy_attrs = ICD_POLICY_ATTRIBUTE_CONN_UI;
+  else
+    policy_attrs = 0;
+
+  sender = dbus_message_get_sender(msg);
+  message = dbus_message_new_method_return(msg);
+
+  if (!message)
+  {
+    ILOG_ERR("dbus api out of memory when creating connect reply to '%s'",
+             sender);
+    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+  }
+
+  icd_dbus_send_system_msg(message);
+  dbus_message_unref(message);
+
+  if (dbus_message_iter_next(&iter1) &&
+      dbus_message_iter_get_element_type(&iter1) == DBUS_TYPE_STRUCT)
+  {
+    dbus_message_iter_recurse(&iter1, &iter2);
+
+    while (dbus_message_iter_get_arg_type(&iter2) == DBUS_TYPE_STRUCT)
+    {
+      dbus_message_iter_recurse(&iter2, &iter3);
+      dbus_message_iter_get_basic(&iter3, &service_type);
+      dbus_message_iter_next(&iter3);
+      dbus_message_iter_get_basic(&iter3, &service_attrs);
+      dbus_message_iter_next(&iter3);
+      dbus_message_iter_get_basic(&iter3, &service_id);
+      dbus_message_iter_next(&iter3);
+      dbus_message_iter_get_basic(&iter3, &network_type);
+      dbus_message_iter_next(&iter3);
+      dbus_message_iter_get_basic(&iter3, &network_attrs);
+      dbus_message_iter_next(&iter3);
+
+      if (dbus_message_iter_get_arg_type(&iter3) != DBUS_TYPE_ARRAY ||
+          dbus_message_iter_get_element_type(&iter3) != DBUS_TYPE_BYTE)
+      {
+        ILOG_ERR("%s: dbus api wrong type for network id", "connect");
+        break;
+      }
+
+      dbus_message_iter_recurse(&iter3, &iter4);
+      dbus_message_iter_get_fixed_array(&iter4, &network_id, &len);
+
+      if (request || dbus_message_iter_has_next(&iter2))
+      {
+        if (!request)
+        {
+          ILOG_DEBUG("icd dbus created new OSSO_IAP_ANY request");
+
+          request = icd_request_new(policy_attrs, NULL, 0, NULL, NULL,
+                                    policy_attrs, OSSO_IAP_ANY);
+        }
+
+        ILOG_DEBUG("icd dbus add iap %s/%0x/%s srv %s/%0x/%s", service_type,
+                   service_attrs, service_id, network_type, network_attrs,
+                   network_id);
+        icd_request_add_iap(request, service_type, service_attrs, service_id,
+                            network_type, network_attrs, network_id, -1);
+      }
+      else
+      {
+        ILOG_DEBUG("icd dbus got one nw only, %s/%0x/%s srv %s/%0x/%s",
+                   service_type, service_attrs, service_id, network_type,
+                   network_attrs, network_id);
+        request = icd_request_new(policy_attrs, service_type, service_attrs,
+                                  service_id, network_type, network_attrs,
+                                  network_id);
+      }
+
+      dbus_message_iter_next(&iter2);
+    }
+  }
+
+  if (!request)
+  {
+    request =
+        icd_request_new(policy_attrs, NULL, 0, NULL, NULL, 0, OSSO_IAP_ANY);
+  }
+
+  icd_request_tracking_info_add(
+        request, icd_tracking_info_new(ICD_TRACKING_INFO_ICD2, sender, NULL));
+
+  if (policy_attrs & ICD_POLICY_ATTRIBUTE_CONN_UI)
+  {
+    struct icd_request *merge_request = icd_request_find(NULL, 0, OSSO_IAP_ASK);
+
+    if (merge_request)
+      icd_request_merge(merge_request, request);
+  }
+
+  icd_request_make(request);
+
+  return DBUS_HANDLER_RESULT_HANDLED;
+}
+
 /** method calls provided */
 static const struct icd_dbus_mcall_table icd_dbus_api_mcalls[] = {
  {ICD_DBUS_API_SCAN_REQ, "u", "as", icd_dbus_api_scan_req},
  {ICD_DBUS_API_SCAN_REQ, "uas", "as", icd_dbus_api_scan_req},
  {ICD_DBUS_API_SCAN_CANCEL, "", "", icd_dbus_api_scan_cancel},
- /*{ICD_DBUS_API_CONNECT_REQ, "u", "", icd_dbus_api_connect_req},
- {ICD_DBUS_API_CONNECT_REQ, "ua(sussuay)", "", icd_dbus_api_connect_req},*/
+ {ICD_DBUS_API_CONNECT_REQ, "u", "", icd_dbus_api_connect_req},
+ {ICD_DBUS_API_CONNECT_REQ, "ua(sussuay)", "", icd_dbus_api_connect_req},
  {ICD_DBUS_API_SELECT_REQ, "u", "", icd_dbus_api_select_req},
  {ICD_DBUS_API_DISCONNECT_REQ, "usussuay", "", icd_dbus_api_disconnect_req},
  {ICD_DBUS_API_DISCONNECT_REQ, "u", "", icd_dbus_api_disconnect_req},

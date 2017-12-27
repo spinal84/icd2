@@ -125,6 +125,13 @@ typedef gboolean
                                   const guint network_attrs,
                                   gint *network_priority);
 
+/**
+ * @brief  Policy module service module check function.
+ *
+ * @param network_type network type
+ *
+ * @returns TRUE if there is a suitable service module loaded, FALSE if not
+*/
 typedef gboolean
 (*icd_policy_service_module_check_fn)(const gchar *network_type);
 

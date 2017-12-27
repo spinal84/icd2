@@ -33,6 +33,7 @@ PKG_CHECK_MODULES(ICD,
 			gtk+-2.0 dnl
 			dbus-glib-1 dnl
 			osso-ic dnl
+			mce dnl
 			gconf-2.0])
 
 AC_SUBST(ICD_LIBS)

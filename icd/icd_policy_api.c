@@ -173,7 +173,7 @@ icd_policy_api_request_cancel(struct icd_policy_request *req)
   if (request->state == ICD_REQUEST_WAITING ||
       request->state == ICD_REQUEST_POLICY_PENDING)
   {
-    icd_policy_api_run(icd_policy_api_request_cancel_iter, req, 0);
+    icd_policy_api_run(icd_policy_api_request_cancel_iter, req, NULL);
   }
   else
   {

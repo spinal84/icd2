@@ -1,0 +1,3 @@
+icd/*.h usr/include/icd/
+support/*.h usr/include/icd/support/
+icd2.pc usr/lib/pkgconfig/

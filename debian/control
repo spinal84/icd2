@@ -1,0 +1,46 @@
+Source: icd2
+Section: net
+Priority: optional
+Maintainer: Ivan J. <parazyd@dyne.org>
+Build-Depends: debhelper (>= 4.1.0),
+               autoconf,
+               automake,
+               libtool-bin,
+               libgconf2-dev,
+               libglib2.0-dev,
+               libdbus-glib-1-dev,
+               icd2-osso-ic-dev,
+               mce-dev,
+Standards-Version: 3.7.2
+
+Package: icd2
+Architecture: any
+Replaces: osso-ic
+Provides: osso-ic
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+		 dbus,
+		 dsme,
+		 libicd2 (= ${binary:Version})
+Description: Internet Connectivity daemon
+ The Internet Connectivity daemon, ICd2, is responsible for network
+ connectivity in the device.
+
+Package: libicd2
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: Support libraries for Internet Connectivity daemon and its plugins
+ This package contains the following support libraries:
+ * logging
+ * shortcuts for D-Bus handling
+ * policy
+ The support libraries are used by ICd and any plugin modules that see some
+ benefit in using them.
+
+Package: icd2-dev
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libicd2 (= ${binary:Version})
+Description: Development files for Internet Connectivity daemon plugins
+ This package contains header files for the following Internet Connectivity
+ daemon plugin module(s):
+ * network module

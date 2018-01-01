@@ -1,0 +1,3 @@
+usr/sbin/icd2
+usr/lib/*/libicd_policy_*.so usr/lib/icd2/
+etc/*

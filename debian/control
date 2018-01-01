@@ -2,7 +2,8 @@ Source: icd2
 Section: net
 Priority: optional
 Maintainer: Ivan J. <parazyd@dyne.org>
-Build-Depends: debhelper (>= 4.1.0),
+Build-Depends: debhelper (>= 9),
+               dh-autoreconf,
                autoconf,
                automake,
                libtool-bin,

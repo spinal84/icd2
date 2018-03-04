@@ -582,7 +582,7 @@ icd_iap_disconnect(struct icd_iap *iap, const gchar *err_str)
 
       while (iap->script_pids)
       {
-        pid_t pid = (pid_t)(iap->script_pids->data);
+        pid_t pid = GPOINTER_TO_INT(iap->script_pids->data);
         ILOG_DEBUG("requesting cancellation of script pid %d", pid);
         icd_script_cancel(pid);
         iap->script_pids = g_slist_delete_link(iap->script_pids,

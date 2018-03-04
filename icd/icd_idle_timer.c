@@ -173,7 +173,7 @@ icd_idle_timer_trigger(GIOChannel *source, GIOCondition condition,
   gchar buf[16];
   gsize bytes_read;
 
-  if (g_io_channel_read(source, buf, sizeof(buf) - 1, &bytes_read))
+  if (g_io_channel_read_chars(source, buf, sizeof(buf) - 1, &bytes_read, NULL))
   {
     ILOG_INFO("idle timer failed to read event source");
     return TRUE;

@@ -1,10 +1,10 @@
-AC_INIT([Internet Connectivity daemon 2], [0.87+fremantle10+0m5], [], icd2)
-AC_CANONICAL_SYSTEM
-AC_CONFIG_MACRO_DIR([m4])
-
+AC_INIT([Internet Connectivity daemon 2], patsubst(esyscmd([dpkg-parsechangelog | sed -n '/^Version: \(.*\)$/ {s//\1/;p}']), [
+]), [], [icd2])
 AM_CONFIG_HEADER(config.h)
+
+AC_CONFIG_MACRO_DIR([m4])
 AM_MAINTAINER_MODE
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([foreign])
 
 AC_PROG_CC
 AC_PROG_INSTALL
@@ -43,6 +43,8 @@ AC_SUBST(ICD_CFLAGS)
 #+++++++++++++++++++
 
 AC_OUTPUT([
+icd2.pc
+icd/network_api.h
 Makefile
 support/Makefile
 icd/Makefile

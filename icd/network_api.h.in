@@ -170,7 +170,7 @@ the IAP to be restarted.
 
 
 /** ICd2 version this network module is compiled against */
-#define ICD_NW_MODULE_VERSION  "0.87+fremantle10+0m5"
+#define ICD_NW_MODULE_VERSION  "@PACKAGE_VERSION@"
 
 #include "network_api_defines.h"
 

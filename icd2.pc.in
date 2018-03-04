@@ -6,6 +6,7 @@ icdplugindir=${exec_prefix}/lib/icd2
 
 Name: icd2
 Description: Internet Connectivity daemon 2 plugin module files
-Version: 0.87+fremantle10+0m5
+Version: @PACKAGE_VERSION@
 Requires: glib-2.0 >= 2.8.6
 Cflags: -I${includedir}
+Libs: -licd_dbus -licd_log -licd_settings

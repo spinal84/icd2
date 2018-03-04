@@ -1,3 +1,6 @@
 icd/*.h usr/include/icd/
 support/*.h usr/include/icd/support/
 icd2.pc usr/lib/pkgconfig/
+usr/lib/*/libicd_dbus.so usr/lib/
+usr/lib/*/libicd_log.so usr/lib/
+usr/lib/*/libicd_settings.so usr/lib/

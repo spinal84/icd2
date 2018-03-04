@@ -508,7 +508,7 @@ icd_srv_provider_load_modules(struct icd_context *icd_ctx)
         }
       }
 
-      while (network_types);
+      while (network_types)
       {
         g_free(network_types->data);
         network_types = g_slist_delete_link(network_types, network_types);

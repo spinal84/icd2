@@ -22,6 +22,7 @@ Depends: ${shlibs:Depends},
          ${misc:Depends},
 		 dbus,
 		 dsme,
+		 icd2-settings-default,
 		 libicd2 (= ${binary:Version})
 Description: Internet Connectivity daemon
  The Internet Connectivity daemon, ICd2, is responsible for network

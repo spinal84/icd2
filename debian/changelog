@@ -1,3 +1,13 @@
+icd2 (0.88) unstable; urgency=medium
+
+  [Ivaylo Dimitrov]
+  * fix versioning
+  * do not create endless loop
+  * fix some compiler warnings
+  * add missing .co files in -dev package
+
+ -- Ivan J. <parazyd@dyne.org>  Mon, 05 Mar 2018 18:50:00 +0100
+
 icd2 (0.87) unstable; urgency=medium
 
   * Initial packaging

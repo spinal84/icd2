@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/bin/sh
 # 
 #		Written by Nokia based on skeleton code
 #		written by Miquel van Smoorenburg <miquels@cistron.nl>.

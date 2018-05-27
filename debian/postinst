@@ -1,0 +1,5 @@
+#!/bin/sh
+
+rc-update add icd2 default || true
+
+exit 0

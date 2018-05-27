@@ -1,0 +1,5 @@
+#!/bin/sh
+
+rc-update del icd2 default || true
+
+exit 0

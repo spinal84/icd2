@@ -1,3 +1,11 @@
+icd2 (0.89) unstable; urgency=medium
+
+  * Add icd2-settings-default as runtime dep.
+  * service: Switch to bash instead of sh
+  * Port icd2 initscript to OpenRC.
+
+ -- Ivan J. <parazyd@dyne.org>  Sun, 03 Jun 2018 13:30:00 +0200
+
 icd2 (0.88) unstable; urgency=medium
 
   [Ivaylo Dimitrov]

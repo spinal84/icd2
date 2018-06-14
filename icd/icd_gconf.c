@@ -41,7 +41,7 @@ icd_gconf_get_iap_bool(const char *iap_name, const char *key_name, gboolean def)
 
   if (val)
   {
-    if (G_VALUE_HOLDS_BOOLEAN(val))
+    if (val->type == GCONF_VALUE_BOOL)
       rv = gconf_value_get_bool(val);
 
     gconf_value_free(val);

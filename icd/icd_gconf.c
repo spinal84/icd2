@@ -106,7 +106,7 @@ icd_gconf_remove_dir(const gchar *settings_name)
 gboolean
 icd_gconf_remove_temporary(const gchar *settings_name)
 {
-  GConfClient *gconf = gconf_client_get_default();
+  GConfClient *gconf;
   GError *err = NULL;
   gboolean rv = FALSE;
   GSList *l;
@@ -114,10 +114,13 @@ icd_gconf_remove_temporary(const gchar *settings_name)
   if (settings_name)
     return icd_gconf_remove_dir(settings_name);
 
+  gconf = gconf_client_get_default();
+
   l = gconf_client_all_dirs(gconf, ICD_GCONF_PATH, &err);
 
   if (err)
   {
+    g_object_unref(gconf);
     icd_gconf_check_error(&err);
     return FALSE;
   }
@@ -139,6 +142,8 @@ icd_gconf_remove_temporary(const gchar *settings_name)
     g_free(l->data);
     l = g_slist_remove_link(l, l);
   }
+
+  g_object_unref(gconf);
 
   return rv;
 }

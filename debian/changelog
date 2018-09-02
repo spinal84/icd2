@@ -1,3 +1,10 @@
+icd2 (0.91) unstable; urgency=medium
+
+  * Ensure that icd2 initscript has dbus user session by depending on
+    af-services init script.
+
+ -- Merlijn Wajer <merlijn@wizzup.org>  Sun, 02 Sep 2018 22:13:50 +0200
+
 icd2 (0.90) unstable; urgency=medium
 
   * Fix temporary network reading

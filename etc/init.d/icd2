@@ -4,7 +4,7 @@
 description="Internet Connectivity daemon 2"
 
 depend() {
-	need networking dsme
+	need networking dsme af-services
 }
 
 start_pre() {

@@ -1,0 +1,81 @@
+Internet Connectivity daemon (ICd2)
+==================================
+Responsible for network connectivity in the device.
+
+
+Description
+===========
+The central concept for maemo Internet connections is the Internet
+Access Point (IAP), which represents a logical Internet (IP) connection
+that the user defines. An IAP has a unique name, usually in form of
+UUID). Among other things, it defines the radio bearer (e.g. WLAN,
+GPRS), and usually also the data transfer speed, username, password,
+proxy server, and the corresponding access point in the Internet or the
+telephone number of the service provider's modem.
+
+If the ICd receives a request to activate or deactivate an IAP, the ICd
+activates the IAP or, if no IAP has been defined as the default, shows a
+UI requesting the user to choose one. Depending on the type of the IAP,
+the ICd uses the appropriate network type plug-in to activate or
+deactivate specific network interface.
+
+The ICd tracks the applications requesting IAPs by recording their D-Bus
+base service names. This allows the ICd to detect situations where
+processes using an IAP have aborted or crashed.
+
+Automatic connection creation feature. The device tries to connect
+automatically to the saved IAPs, and keep connected as long as possible.
+With this feature, applications like e-mail and RSS reader are always up
+to date. The device is also always ready for online use, for example,
+incoming VoIP calls or IM chat.
+
+When the device is not connected, it scans for saved IAPs and tries to
+connect automatically, taking into account the value defined by the
+search interval configuration parameter. The search interval can be 5,
+10, 30 or 60 minutes; all other values are automatically mapped to
+"Never". This setup switches off the automatic connection feature. In
+this case connections are created only when applications require it.
+
+Because each application keeps its data updated and provides the always-
+online feature, the ICd is only responsible for creating connections.
+
+While writing an application making use of the ICd system, keep the
+following in mind:
+1. The application must always use the existing available connection.
+2. If the device is not connected but a connection is required by user
+interaction, the application must require connection creation using
+LibConIC API.
+3. Ensure that the user is aware of updates and can see the time when
+the data was last updated.
+4. Ensure that the application registers via LibConIC and listens to
+signals emitted by the ICd (Connection Created, Lost and Changed), and
+react as follows:
+ - Connection Created: Use the connection and update all data.
+ - Connection Lost: Go to an idle state silently and wait until a new
+   connection is created.
+ - Connection Changed: Use the new connection.
+5. Ensure that automatic data updates run in background and silently:
+ - Avoid alarming the user with unnecessary banners or dialogs.
+ - Ensure that usernames and passwords are saved so that automatic
+   updates can be performed without prompts.
+ - During and after updates, ensure that no failures display error
+   notifications.
+6. The connectivity infrastructure must take care of error situations in
+a centralized way.
+
+You can switch off the automatic connection creation feature by using
+offline mode. While in this mode, the configuration parameter for
+allowing WLAN in offline mode is checked. Depending on the state of this
+configuration parameter, WLAN IAPs are either enabled or disabled in the
+offline mode. Also other radios like Bluetooth are normally disabled in
+the offline mode.
+
+
+Responsibilities and requirements
+=================================
+* Controlling that only one Internet connection (one active IAP) can
+  exist at any given time.
+* Using WLAN or GPRS connection daemon for getting a network device and
+  getting the connection authenticated
+* Starting IP level services like PPP and DHCP
+* Providing statistics about the usage of IAPs to any application

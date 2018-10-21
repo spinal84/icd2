@@ -150,7 +150,7 @@ int
 main(int argc, char **argv)
 {
   struct icd_context *icd_ctx;
-  gint pid;
+  pid_t pid;
   int rv = 0;
 
   icd_context_init();

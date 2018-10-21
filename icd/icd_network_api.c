@@ -157,7 +157,7 @@ icd_network_api_watch_pid(const pid_t pid, gpointer watch_cb_token)
     *ppid = pid;
     module->pid_list = g_slist_prepend(module->pid_list, ppid);
 
-    ILOG_DEBUG("added pid %ld to module '%s'", (long)pid, module->name);
+    ILOG_DEBUG("added pid %d to module '%s'", pid, module->name);
   }
   else
     ILOG_ERR("module NULL while submitting child pid");

@@ -9,10 +9,8 @@
 #include "icd_pid.h"
 
 /**
- * @brief Write the process id to the pid file.
- *
- * @param pidfile the full pathname of the pid file
- *
+ * Write the process id to the pid file
+ * @param  pidfile  the full pathname of the pid file
  * @return TRUE on success, FALSE on failure
  */
 gboolean
@@ -34,10 +32,8 @@ icd_pid_write(const char *pidfile)
 }
 
 /**
- * @brief Remove process id file.
- *
- * @param pidfile the full pathname of the pid file
- *
+ * Remove process id file
+ * @param  pidfile  the full pathname of the pid file
  * @return TRUE on success, FALSE on failure
  */
 gboolean
@@ -47,12 +43,9 @@ icd_pid_remove(const char *pidfile)
 }
 
 /**
- * @brief Read the process id from the pid file.
- *
- * @param pidfile the full pathname of the pid file
- *
+ * Read the process id from the pid file
+ * @param  pidfile  the full pathname of the pid file
  * @return the process id or -1 on error
- *
  */
 static
 pid_t icd_pid_read(const char * pidfile)
@@ -80,15 +73,12 @@ pid_t icd_pid_read(const char * pidfile)
 }
 
 /**
- * @brief Check wheter the process id stored in the pid file exists. If
- * pid file exists, but is empty or contains invalid process id,
- * pid file is removed
+ * Check whether the process id stored in the pid file exists. If pid file
+ * exists, but is empty or contains invalid process id, pid file is removed
  *
- * @param pidfile the full pathname of the pid file
- *
- * @return 0 if no pid file is found or no such process is running,
- * otherwise the process id of the existing process
- *
+ * @param  pidfile  the full pathname of the pid file
+ * @return 0 if no pid file is found or no such process is running, otherwise
+ *         the process id of the existing process
  */
 pid_t
 icd_pid_check(const char *pidfile)

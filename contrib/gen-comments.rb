@@ -542,6 +542,9 @@ class HeadComment
 	# Authors parsing
 	authors = page.css('.author dd').map{|a| a.text.gsub(/[  \t]+/, ' ').strip.lines}.flatten
 	authors = authors.map{|a| a.strip}.uniq
+	# Add GPL copyright, skip adding authors
+	copyright = 'GNU GPLv2 or later'
+	authors   = []
 	if authors.any?
 	    if authors.size > 1
 		desc << "\n\n@authors " << authors.join("\n	 ")
@@ -859,7 +862,6 @@ class CommentsHandler
 	    long_comment = long_comment || @engaged_files.find{|f| true}
 	    @head_comment.long = long_comment.path if long_comment
 	    @engaged_files.each do |f|
-		next  ## SKIP adding new comments
 		puts "\nHead comment for #{f.path}"
 		@@extracted += 1
 		if f.head_comment

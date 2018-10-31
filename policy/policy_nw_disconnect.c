@@ -4,10 +4,13 @@
 #include "policy_api.h"
 #include "icd_log.h"
 
+
 #define POLICY_NW_DISCONNECT_CANCELS_ALWAYS_ONLINE_GCONF_PATH \
         ICD_GCONF_SETTINGS "/policy/policy_nw_disconnect/cancel_always_online"
+
 #define POLICY_NW_DISCONNECT_USER_REFCOUNT_GCONF_PATH \
         ICD_GCONF_SETTINGS "/policy/policy_nw_disconnect/user_refcount"
+
 
 static gboolean
 policy_nw_disconnect_cancel_always_online()

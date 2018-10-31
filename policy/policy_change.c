@@ -8,19 +8,29 @@
 #include "policy_api.h"
 #include "icd_log.h"
 
+
 #define POLICY_CHANGE_CALL_TIMEOUT 10 * 1000
+
 #define POLICY_CHANGE_EXTRA_FILTER "member='" ICD_UI_CHANGE_SIG "'"
+
 
 struct policy_change_data
 {
   DBusPendingCall *change_call;
+
   gchar *change_from;
+
   gchar *change_to;
+
   gboolean is_changing;
+
   icd_policy_request_new_cb_fn done_cb;
+
   struct icd_policy_request *new_request;
+
   gpointer done_token;
 };
+
 
 static void
 policy_change_delete_data(struct policy_change_data *data)

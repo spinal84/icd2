@@ -15,30 +15,51 @@
 #define AUTO_CONNECT_KEY ICD_GCONF_NETWORK_MAPPING "/auto_connect"
 #define SEARCH_INTERVAL_KEY ICD_GCONF_NETWORK_MAPPING "/search_interval"
 
+
 #define POLICY_ALWAYS_ONLINE_IAP_TIMEOUT   500
+
 #define POLICY_ALWAYS_ONLINE_MCE_FILTER   "member='" MCE_DEVICE_MODE_SIG "'"
+
 #define POLICY_ALWAYS_ONLINE_MCE_TIMEOUT   5000
+
 
 struct always_online_data
 {
   guint connection_count;
+
   guint count_iaps_id;
+
   guint iap_count;
+
   gint timeout;
+
   guint timeout_id;
+
   gboolean auto_conn;
+
   gboolean always_change;
+
   gboolean always_online_value_changed;
+
   guint notify_nw_params;
+
   guint notify_connections;
+
   gboolean flight_mode;
+
   DBusPendingCall *pending_flightmode;
+
   gboolean flightmode_signals;
+
   icd_policy_request_make_new_fn make_request;
+
   icd_policy_network_priority_fn priority;
+
   icd_policy_service_module_check_fn srv_check;
+
   gint highest_network_priority;
 };
+
 
 static void policy_always_online_run(struct always_online_data *data,
                                      gboolean immediately);

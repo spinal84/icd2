@@ -24,7 +24,7 @@
 #define SCRIPT_IAP_TYPE   "ICD_CONNECTION_TYPE"
 #define SCRIPT_PROXY_UNSET   "ICD_PROXY_UNSET"
 
-const gchar const* reserved_env_vars[] = {
+static const gchar const* reserved_env_vars[] = {
   SCRIPT_ADDRFAM,
   SCRIPT_IFACE,
   SCRIPT_LOGICAL,

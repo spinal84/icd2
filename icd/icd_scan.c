@@ -72,7 +72,7 @@ string_equal(const char *a, const char *b)
  * @param user_data user data to remove
  *
  */
-void
+static void
 icd_scan_listener_remove(struct icd_network_module *module, icd_scan_cb_fn cb,
                          gpointer user_data)
 {

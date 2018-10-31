@@ -210,7 +210,7 @@ icd_network_api_status_update(gchar *network_type, guint network_attrs,
  * @param network_id IAP name or local id, e.g. SSID
  *
  */
-void
+static void
 icd_network_api_close(enum icd_nw_status status, const gchar *err_str,
                       const gchar *network_type, const guint network_attrs,
                       const gchar *network_id)

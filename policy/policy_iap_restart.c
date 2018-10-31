@@ -4,8 +4,11 @@
 #include "policy_api.h"
 #include "icd_log.h"
 
+
 #define POLICY_IAP_RESTART_MIN 0
+
 #define POLICY_IAP_RESTART_DEFAULT 25
+
 #define POLICY_IAP_RESTART_MAX 40
 
 #define POLICY_IAP_RESTART_COUNT_GCONF_PATH ICD_GCONF_SETTINGS \

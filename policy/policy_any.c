@@ -11,39 +11,62 @@
                                          "/change_while_connected"
 #define AUTO_CONNECT_KEY ICD_GCONF_NETWORK_MAPPING "/auto_connect"
 
+
 struct policy_any_data
 {
   icd_policy_nw_add_fn add_network;
+
   icd_policy_request_merge_fn merge;
+
   icd_policy_scan_start_fn scan_start;
+
   icd_policy_scan_stop_fn scan_stop;
+
   struct icd_policy_request *request;
+
   GSList *ongoing_scans;
+
   GSList *scan_types_list;
+
   gint min_prio;
+
   gboolean iaps_added;
+
   GSList *found_networks;
+
   icd_policy_service_module_check_fn srv_check;
 };
+
 
 struct policy_scan_data
 {
   icd_policy_request_new_cb_fn policy_done_cb;
+
   gpointer policy_token;
+
   struct policy_any_data *any_data;
 };
+
 
 struct policy_any_network
 {
   gchar *service_type;
+
   guint service_attrs;
+
   gchar *service_id;
+
   gchar *network_type;
+
   guint network_attrs;
+
   gchar *network_id;
+
   gint network_priority;
+
   enum icd_nw_levels signal;
 };
+
 
 static gboolean
 policy_any_string_equal(const gchar *a, const gchar *b)

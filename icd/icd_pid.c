@@ -19,7 +19,7 @@ gboolean
 icd_pid_write(const char *pidfile)
 {
   FILE *fp;
-  long pid;
+  pid_t pid;
 
   fp = fopen(pidfile, "w");
 
@@ -27,7 +27,7 @@ icd_pid_write(const char *pidfile)
     return FALSE;
 
   pid = getpid();
-  fprintf(fp, "%ld\n", (long)pid);
+  fprintf(fp, "%d\n", pid);
   fclose(fp);
 
   return TRUE;
@@ -55,12 +55,12 @@ icd_pid_remove(const char *pidfile)
  *
  */
 static
-glong icd_pid_read(const char * pidfile)
+pid_t icd_pid_read(const char * pidfile)
 {
   FILE *fp;
   int vars_read;
   struct stat stat_buf;
-  glong pid;
+  int pid;
 
   if (stat(pidfile, &stat_buf) < 0)
     return -1;
@@ -70,13 +70,13 @@ glong icd_pid_read(const char * pidfile)
   if (!fp)
     return -1;
 
-  vars_read = fscanf(fp, "%ld", &pid);
+  vars_read = fscanf(fp, "%d", &pid);
   fclose(fp);
 
   if (vars_read != 1)
     return -1;
 
-  return pid;
+  return (pid_t)pid;
 }
 
 /**
@@ -90,10 +90,10 @@ glong icd_pid_read(const char * pidfile)
  * otherwise the process id of the existing process
  *
  */
-glong
+pid_t
 icd_pid_check(const char *pidfile)
 {
-  glong pid = icd_pid_read(pidfile);
+  pid_t pid = icd_pid_read(pidfile);
 
   if (pid <= 0 || (kill(pid, 0) < 0 && errno == ESRCH))
   {

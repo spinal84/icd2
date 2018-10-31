@@ -1,14 +1,3 @@
-/**
-@file icd_exec.c
-
-@copyright GNU GPLv2 or later
-
-@addtogroup icd_exec ICd execution
-
-@ingroup internal
-
- * @{ */
-
 #define _GNU_SOURCE
 
 #include <stdlib.h>
@@ -38,6 +27,25 @@
 #include "icd_dbus_api.h"
 #include "icd_srv_provider.h"
 #include "icd_network_priority.h"
+
+/**
+ * @defgroup internal  ICd internal functions
+ * @defgroup policy    Policy modules
+ * @defgroup testing   Testing componenets
+ * @defgroup support_libraries
+ *                     Support libraries
+ */
+
+/**
+@file icd_exec.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_exec ICd execution
+
+@ingroup internal
+
+@{ */
 
 
 /** the pid file identical to previous version of icd */

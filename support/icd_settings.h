@@ -3,13 +3,16 @@
 
 #include <glib.h>
 
+/** settings handle; for internal use only */
 typedef struct {
   struct {
     gchar *network_type;
     guint network_attrs;
     gchar *network_id;
   } nw;
+  /** settings backend that provides the information */
   gpointer backend;
+  /** settings set for the backend, i.e. "network_types", "IAP", etc. */
   gchar *set;
 } icd_settings_handle_t;
 

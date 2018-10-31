@@ -28,7 +28,7 @@ the singly linked list must be updated whenever a network is removed.
                            |
                            +-&gt;icd_scan_cache_list
                                 +-&gt;GSList for network_idN
- </pre>
+ </pre> 
 
 @ingroup internal
 

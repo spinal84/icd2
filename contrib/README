@@ -1,0 +1,8 @@
+Instructions for Debian
+=======================
+
+As root: aptitude install ruby ruby-dev
+As user: gem install --user-install nokogiri
+
+Parse doc/html and put comments to sources:
+./gen-comments.rb

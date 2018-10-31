@@ -28,6 +28,14 @@ PKG_PROG_PKG_CONFIG
 
 AC_SUBST(CFLAGS)
 
+AC_COMPILE_IFELSE(
+     [AC_LANG_PROGRAM(
+       [#include <unistd.h>
+        enum {sizeof_int_equal_to_sizeof_pid_t = 1/(int)(!!(sizeof(int) == sizeof(pid_t))) };]
+     )], [],
+     [AC_MSG_ERROR([Unsupported platform, sizeof(pid_t) != sizeof(int)])
+     ])
+
 PKG_CHECK_MODULES(ICD,
 			[glib-2.0 dnl
 			dbus-glib-1 dnl

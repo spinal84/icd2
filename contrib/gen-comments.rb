@@ -832,7 +832,6 @@ class CommentsHandler
 	    else
 		begin
 		    if c.text
-			next  ## SKIP adding new comments
 			src.add_comment(c)
 			puts "\nComment parsed from HTML:\n#{c}"
 			@@injected += 1

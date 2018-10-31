@@ -200,6 +200,10 @@ icd_request_tracking_info_delete(const gchar *sender)
         icd_request_tracking_info_delete_foreach, (gpointer)sender) != NULL;
 }
 
+/**
+ * Send a NACK to all D-Bus listeners
+ * @param request  the request to NACK
+ */
 void
 icd_request_send_nack(struct icd_request *request)
 {
@@ -209,6 +213,10 @@ icd_request_send_nack(struct icd_request *request)
   request->users = NULL;
 }
 
+/**
+ * Free an icd_request structure
+ * @param request  the request
+ */
 static void
 icd_request_free(struct icd_request *request)
 {
@@ -232,6 +240,14 @@ icd_request_free(struct icd_request *request)
   g_free(request);
 }
 
+/**
+ * Notify the caller with the status of the request. The callback will not be
+ * called after #ICD_REQUEST_DISCONNECTED or #ICD_REQUEST_DENIED has been
+ * reported
+ *
+ * @param status   the status of the request to pass to the callback
+ * @param request  the request whose processing is finished
+ */
 static void
 icd_request_update_status(enum icd_request_status status,
                           struct icd_request *request)
@@ -242,6 +258,10 @@ icd_request_update_status(enum icd_request_status status,
   request->state = status;
 }
 
+/**
+ * Free memory allocated for all IAPs in a request
+ * @param request  the request
+ */
 void
 icd_request_free_iaps(struct icd_request *request)
 {
@@ -260,6 +280,14 @@ icd_request_free_iaps(struct icd_request *request)
   }
 }
 
+/**
+ * Cancel a request. The request will be freed when the
+ * icd_request_try_iap_cb() callback is called at the time of IAP
+ * disconnection
+ *
+ * @param request       the request
+ * @param policy_attrs  ICD_POLICY_ATTRIBUTE_* attributes
+ */
 void
 icd_request_cancel(struct icd_request *request, guint policy_attrs)
 {
@@ -315,6 +343,12 @@ cancel_policy_req:
   icd_request_free(request);
 }
 
+/**
+ * Add tracking info to a request
+ *
+ * @param request  the request
+ * @param track    tracking info
+ */
 void
 icd_request_tracking_info_add(struct icd_request *request,
                               struct icd_tracking_info *track)
@@ -329,6 +363,23 @@ icd_request_tracking_info_add(struct icd_request *request,
   }
 }
 
+/**
+ * Request a connection. ICd policy will be consulted and any number of IAPs
+ * may be created in response.
+ *
+ * @param  policy_attrs   ICD_POLICY_ATTRIBUTE_* attributes
+ * @param  service_type   service type
+ * @param  service_attrs  service attributes
+ * @param  service_id     service id
+ * @param  network_type   network type to connect
+ * @param  network_attrs  network attributes
+ * @param  network_id     network id uniquely identifies the connection to
+ *                        the network module in question
+ *
+ * @return the newly created request which the caller shall not free or
+ *         reference in any way. The pointer is to be passed only to
+ *         icd_request_tracking_info_* and icd_request_make functions.
+ */
 struct icd_request *
 icd_request_new(guint policy_attrs, const gchar *service_type,
                 const guint service_attrs, const gchar *service_id,
@@ -351,6 +402,15 @@ icd_request_new(guint policy_attrs, const gchar *service_type,
   return request;
 }
 
+/**
+ * Find out whether the request already exists in the icd context request
+ * list
+ *
+ * @param  request    a request from the list
+ * @param  user_data  the request to be added
+ *
+ * @return the request if it is on the list, NULL if not
+ */
 static gpointer
 icd_request_make_check_duplicate(struct icd_request *request,
                                  gpointer user_data)
@@ -361,6 +421,12 @@ icd_request_make_check_duplicate(struct icd_request *request,
   return request;
 }
 
+/**
+ * Check policy and try to connect IAP
+ * @param  request  the request
+ * @return TRUE if connection is being tried; FALSE when there are no more
+ *         IAPs to try
+ */
 static gboolean
 icd_request_try_iap(struct icd_request *request)
 {
@@ -390,6 +456,12 @@ icd_request_try_iap(struct icd_request *request)
   return FALSE;
 }
 
+/**
+ * Try to connect the request (for the first time), request UI dialog if
+ * unsuccessful
+ *
+ * @param request  the request to connect
+ */
 static void
 icd_request_connect(struct icd_request *request)
 {
@@ -409,6 +481,12 @@ icd_request_connect(struct icd_request *request)
   }
 }
 
+/**
+ * Callback for the new_connection policy request.
+ *
+ * @param status  status of the policy request
+ * @param req     the policy request structure
+ */
 static void
 icd_request_connect_iaps(enum icd_policy_status status,
                          struct icd_policy_request *req)
@@ -449,6 +527,11 @@ icd_request_connect_iaps(enum icd_policy_status status,
   }
 }
 
+/**
+ * Make a request for a new network connection.
+ * @param request  the request - do not use after calling this function, as
+ *                 the request may be freed without any further notice
+ */
 void
 icd_request_make(struct icd_request *request)
 {
@@ -481,6 +564,10 @@ icd_request_make(struct icd_request *request)
   icd_policy_api_new_request(&request->req, icd_request_connect_iaps, NULL);
 }
 
+/**
+ * Free all tracking info associated with a request
+ * @param request  the request
+ */
 static void
 icd_request_tracking_info_free(struct icd_request *request)
 {
@@ -493,6 +580,19 @@ icd_request_tracking_info_free(struct icd_request *request)
   request->users = NULL;
 }
 
+/**
+ * Add a network connection to try.
+ *
+ * @param request           the request to which the new network is added
+ * @param service_type      service provider type, see srv_provider_api.h
+ * @param service_attrs     service provider attributes, see
+ *                          srv_provider_api.h
+ * @param service_id        service_provider id, see srv_provider_api.h
+ * @param network_type      network type, see network_api.h
+ * @param network_attrs     network attributes, see network_api.h
+ * @param network_id        network id, see network_api.h
+ * @param network_priority  network priority, default value to use is -1
+ */
 void
 icd_request_add_iap(struct icd_request *request, gchar *service_type,
                     guint service_attrs, gchar *service_id, gchar *network_type,
@@ -545,6 +645,12 @@ icd_request_add_iap(struct icd_request *request, gchar *service_type,
   request->try_iaps = g_slist_append(request->try_iaps, iap);
 }
 
+/**
+ * Send an ACK to all D-Bus listeners
+ *
+ * @param request  the request to ack
+ * @param iap      the IAP to ack
+ */
 void
 icd_request_send_ack(struct icd_request *request, struct icd_iap *iap)
 {
@@ -556,6 +662,14 @@ icd_request_send_ack(struct icd_request *request, struct icd_iap *iap)
     icd_dbus_api_send_ack(request->users, iap);
 }
 
+/**
+ * Find an iap by module
+ *
+ * @param  iap        the IAP struct
+ * @param  user_data  user data
+ *
+ * @return TRUE to continue, FALSE to stop iterating
+ */
 static gboolean
 icd_request_find_iap_by_module(struct icd_iap *iap, gpointer user_data)
 {
@@ -576,6 +690,15 @@ icd_request_find_iap_by_module(struct icd_iap *iap, gpointer user_data)
   return TRUE;
 }
 
+/**
+ * Find a request to change to
+ *
+ * @param  request    the request
+ * @param  user_data  user data passed to icd_request_foreach()
+ *
+ * @return NULL to continue iteration, non-NULL to stop the iteration and
+ *         return this pointer in icd_request_foreach().
+ */
 static gpointer
 icd_request_find_changeto(struct icd_request *request, gpointer user_data)
 {
@@ -585,6 +708,13 @@ icd_request_find_changeto(struct icd_request *request, gpointer user_data)
   return NULL;
 }
 
+/**
+ * Callback for requesting retry UI dialog
+ *
+ * @param success    TRUE if the UI dialog was successfully requested, FALSE
+ *                   otherwise
+ * @param user_data  the request that was retried
+ */
 static void
 icd_request_retry_cb(gboolean success, gpointer user_data)
 {
@@ -601,6 +731,18 @@ icd_request_retry_cb(gboolean success, gpointer user_data)
   }
 }
 
+/**
+ * IAP creation callback. Adds the IAP to the iap context list on success,
+ * frees the IAP and tries with a next one if the IAP failed.
+ *
+ * @param status     status of the IAP creation
+ * @param iap        the iap that was tried; the IAP must not be freed in
+ *                   this callback
+ * @param user_data  the request
+ *
+ * @todo  generate status updates for the event(s)
+ * @todo  how to remove this request if UI goes down
+ */
 static void
 icd_request_try_iap_cb(enum icd_iap_status status, struct icd_iap *iap,
                        gpointer user_data)
@@ -745,6 +887,13 @@ disconnected:
   }
 }
 
+/**
+ * Find a request by IAP id
+ *
+ * @param iap_id    IAP id
+ * @param is_local  TRUE if a locally generated icd2 id is requested, FALSE
+ *                  otherwise
+ */
 struct icd_request *
 icd_request_find_by_iap_id(const gchar *iap_id, const gboolean is_local)
 {
@@ -756,6 +905,15 @@ icd_request_find_by_iap_id(const gchar *iap_id, const gboolean is_local)
   return NULL;
 }
 
+/**
+ * Find a request by IAP
+ *
+ * @param  network_type   network type
+ * @param  network_attrs  network attributes
+ * @param  network_id     network id
+ *
+ * @return the first (and only) request found or NULL
+ */
 struct icd_request *
     icd_request_find_by_iap(const gchar *network_type,
                             const guint network_attrs, const gchar *network_id)
@@ -771,6 +929,12 @@ struct icd_request *
   return NULL;
 }
 
+/**
+ * Remove tracking info to a request
+ *
+ * @param request  the request
+ * @param track    tracking info
+ */
 void
 icd_request_tracking_info_remove(struct icd_request *request,
                                  struct icd_tracking_info *track)
@@ -779,6 +943,14 @@ icd_request_tracking_info_remove(struct icd_request *request,
     request->users = g_slist_remove_all(request->users, track);
 }
 
+/**
+ * Merge two requets
+ *
+ * @param  merge_request  request that is to be merged and freed
+ * @param  existing       the request to merge with
+ *
+ * @return TRUE on success, FALSE on failure
+ */
 gboolean
 icd_request_merge(struct icd_request *merge_request,
                   struct icd_request *existing)

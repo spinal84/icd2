@@ -4,27 +4,28 @@
 #include "policy_api.h"
 #include "icd_log.h"
 
-#define ICD_POLICY_RESTART_COUNT_DEFAULT 25
-#define ICD_POLICY_RESTART_COUNT_MAX 40
+#define POLICY_IAP_RESTART_MIN 0
+#define POLICY_IAP_RESTART_DEFAULT 25
+#define POLICY_IAP_RESTART_MAX 40
 
-#define ICD_POLICY_RESTART_COUNT ICD_GCONF_SETTINGS "/policy/policy_iap_restart/restart_count"
+#define POLICY_IAP_RESTART_COUNT_GCONF_PATH ICD_GCONF_SETTINGS \
+			     "/policy/policy_iap_restart/restart_count"
 
-static enum icd_policy_status
-icd_policy_restart_restart(struct icd_policy_request *network,
-                           guint restart_count, gpointer *privatx)
+static gint
+policy_iap_restart_value()
 {
   GConfClient *gconf = gconf_client_get_default();
+  gint restart_count;
   GConfValue *val;
-  unsigned int restart_count_gconf;
   GError *error = NULL;
 
-  val = gconf_client_get(gconf, ICD_POLICY_RESTART_COUNT, &error);
+  val = gconf_client_get(gconf, POLICY_IAP_RESTART_COUNT_GCONF_PATH, &error);
   g_object_unref(gconf);
 
   if (!G_VALUE_HOLDS_INT(val) || error)
   {
     ILOG_DEBUG("policy restart has no value set, using default %d",
-               ICD_POLICY_RESTART_COUNT_DEFAULT);
+               POLICY_IAP_RESTART_DEFAULT);
 
     if (error)
       g_error_free(error);
@@ -32,22 +33,29 @@ icd_policy_restart_restart(struct icd_policy_request *network,
     if (val)
       gconf_value_free(val);
 
-    restart_count_gconf = ICD_POLICY_RESTART_COUNT_DEFAULT;
+    return POLICY_IAP_RESTART_DEFAULT;
   }
-  else
+
+  restart_count = gconf_value_get_int(val);
+  gconf_value_free(val);
+
+  if (restart_count > POLICY_IAP_RESTART_MAX)
   {
-    restart_count_gconf = gconf_value_get_int(val);
-    gconf_value_free(val);
+    ILOG_WARN("policy restart value %d not in range %d-%d, reset to %d",
+	      restart_count, POLICY_IAP_RESTART_MIN, POLICY_IAP_RESTART_MAX,
+	      POLICY_IAP_RESTART_DEFAULT);
 
-    if (restart_count_gconf > ICD_POLICY_RESTART_COUNT_MAX)
-    {
-      ILOG_WARN("policy restart value %d not in range %d-%d, reset to %d",
-                restart_count_gconf, 0, ICD_POLICY_RESTART_COUNT_MAX,
-                ICD_POLICY_RESTART_COUNT_DEFAULT);
-
-      restart_count_gconf = ICD_POLICY_RESTART_COUNT_DEFAULT;
-    }
+    restart_count = POLICY_IAP_RESTART_DEFAULT;
   }
+
+  return restart_count;
+}
+
+static enum icd_policy_status
+policy_iap_restart(struct icd_policy_request *request,
+		   guint restart_count, gpointer *private)
+{
+  gint restart_count_gconf = policy_iap_restart_value();
 
   if (restart_count <= restart_count_gconf)
     return ICD_POLICY_ACCEPTED;
@@ -66,5 +74,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
                 icd_policy_network_priority_fn priority,
                 icd_policy_service_module_check_fn srv_check)
 {
-  policy_api->restart = icd_policy_restart_restart;
+  policy_api->restart = policy_iap_restart;
 }

@@ -1,3 +1,14 @@
+/**
+@file icd_script.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_script Network script support
+
+@ingroup internal
+
+ * @{ */
+
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
@@ -548,3 +559,5 @@ icd_script_add_env_vars(struct icd_iap *iap, gchar **env_vars)
   ILOG_DEBUG("address family '%s' added to env", env->addrfam);
   iap->script_env = g_slist_prepend(iap->script_env, env);
 }
+
+/** @} */

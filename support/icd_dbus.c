@@ -1,3 +1,14 @@
+/**
+@file icd_dbus.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_dbus D-Bus helper functions
+
+@ingroup support_libraries
+
+ * @{ */
+
 #include "icd_dbus.h"
 #include "icd_log.h"
 
@@ -554,3 +565,5 @@ icd_dbus_cancel_unique_name(DBusPendingCall *pending)
     l = next;
   }
 }
+
+/** @} */

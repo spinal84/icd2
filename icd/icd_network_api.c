@@ -1,3 +1,14 @@
+/**
+@file icd_network_api.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_network_api ICd network API handling
+
+@ingroup internal
+
+ * @{ */
+
 #include <string.h>
 #include <gconf/gconf-client.h>
 #include <osso-ic-dbus.h>
@@ -667,3 +678,5 @@ icd_network_api_unload_modules(struct icd_context *icd_ctx)
   if (icd_ctx->type_to_module)
     g_hash_table_destroy(icd_ctx->type_to_module);
 }
+
+/** @} */

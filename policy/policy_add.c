@@ -1,3 +1,14 @@
+/**
+@file policy_add.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup policy_add New IAP creation
+
+@ingroup policy
+
+ * @{ */
+
 #include "policy_api.h"
 
 /**
@@ -47,3 +58,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
   policy_api->private = add_network;
   policy_api->new_request = policy_add_request;
 }
+
+/** @} */

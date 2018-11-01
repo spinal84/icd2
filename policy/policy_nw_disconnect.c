@@ -1,3 +1,14 @@
+/**
+@file policy_nw_disconnect.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup policy_nw_disconnect Network disconnect reference count
+
+@ingroup policy
+
+ * @{ */
+
 #include <gconf/gconf-client.h>
 #include <osso-ic-gconf.h>
 
@@ -157,3 +168,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
 {
   policy_api->disconnect = policy_nw_disconnect;
 }
+
+/** @} */

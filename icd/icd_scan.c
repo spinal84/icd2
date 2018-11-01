@@ -1,3 +1,14 @@
+/**
+@file icd_scan.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_scan Network scan and scan result handling
+
+@ingroup internal
+
+ * @{ */
+
 #include "icd_log.h"
 #include "icd_scan.h"
 #include "icd_status.h"
@@ -1061,3 +1072,5 @@ icd_scan_cache_entry_find(struct icd_scan_cache_list *scan_cache_list,
 
   return NULL;
 }
+
+/** @} */

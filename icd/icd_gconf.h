@@ -1,6 +1,17 @@
 #ifndef ICD_GCONF_H
 #define ICD_GCONF_H
 
+/**
+@file icd_gconf.h
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_gconf Compatibility functions for gconf settings
+
+@ingroup internal
+
+ * @{ */
+
 #include <glib.h>
 
 /** The key holding the type of an IAP */
@@ -39,5 +50,7 @@ static inline gboolean icd_gconf_agressive_scanning()
                                       ICD_GCONF_AGGRESSIVE_SCANNING,
                                       FALSE);
 }
+
+/** @} */
 
 #endif

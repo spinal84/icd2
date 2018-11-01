@@ -1,3 +1,14 @@
+/**
+@file icd_dbus_api.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_dbus_api ICd2 D-Bus API implementation
+
+@ingroup internal
+
+ * @{ */
+
 #include <string.h>
 #include <dbus/dbus.h>
 #include <osso-ic.h>
@@ -1944,3 +1955,5 @@ icd_dbus_api_update_search(const gchar *network_type, const gchar *destination,
 
   return FALSE;
 }
+
+/** @} */

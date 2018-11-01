@@ -1,3 +1,14 @@
+/**
+@file icd_exec.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_exec ICd execution
+
+@ingroup internal
+
+ * @{ */
+
 #define _GNU_SOURCE
 
 #include <stdlib.h>
@@ -229,3 +240,5 @@ main(int argc, char **argv)
 
   return rv;
 }
+
+/** @} */

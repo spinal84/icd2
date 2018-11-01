@@ -1,3 +1,18 @@
+/**
+@file icd_type_modules.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup type_modules Network type to network module mapping
+
+The network type to module name mapping is stored as a list of strings in
+gconf at
+<code>/system/osso/connectivity/IAP/network_type/&lt;type_name&gt;/network_modules</code>
+
+@ingroup internal
+
+ * @{ */
+
 #include <gconf/gconf-client.h>
 
 #include "icd_type_modules.h"
@@ -61,3 +76,5 @@ icd_policy_modules_get(void)
 
   return l;
 }
+
+/** @} */

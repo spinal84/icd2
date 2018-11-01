@@ -1,3 +1,14 @@
+/**
+@file icd_srv_provider.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_srv_provider Service provider API implementation
+
+@ingroup internal
+
+ * @{ */
+
 #include <string.h>
 #include <time.h>
 #include <gconf/gconf-client.h>
@@ -1002,3 +1013,5 @@ icd_srv_provider_connect(struct icd_iap *iap, icd_srv_provider_connect_cb_fn cb,
                       &module->srv.private);
   return TRUE;
 }
+
+/** @} */

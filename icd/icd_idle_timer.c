@@ -1,3 +1,14 @@
+/**
+@file icd_idle_timer.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_idle_timer Iptables idle timer handling
+
+@ingroup internal
+
+ * @{ */
+
 #include <gconf/gconf-client.h>
 #include <osso-ic-gconf.h>
 
@@ -429,3 +440,5 @@ icd_idle_timer_remove(struct icd_context *icd_ctx)
 
   g_object_unref(gconf);
 }
+
+/** @} */

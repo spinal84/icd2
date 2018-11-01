@@ -1,3 +1,14 @@
+/**
+@file icd_name_owner.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_name_owner D-Bus NameOwnerChanged message handling
+
+@ingroup internal
+
+ * @{ */
+
 #include <dbus/dbus.h>
 #include <osso-ic-ui-dbus.h>
 #include <osso-ic.h>
@@ -139,3 +150,5 @@ icd_name_owner_init(struct icd_context *icd_ctx)
 {
   return icd_name_owner_add_filter(ICD_UI_DBUS_SERVICE);
 }
+
+/** @} */

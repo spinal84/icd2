@@ -1,6 +1,23 @@
 #ifndef ICD_WLAN_DEFS
 #define ICD_WLAN_DEFS
 
+/**
+@file icd_wlan_defs.h
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_wlan_defs Defines for WLAN attribute bits
+
+<dl compact>
+<dt><b><a class="el" href="todo.html#_todo000018">Todo:</a></b></dt>
+<dd>Remove this file when wlan provides a .h file with the needed
+defines</dd>
+</dl>
+
+@ingroup internal
+
+ * @{ */
+
 #include <glib.h>
 
 /** wlan infrastructure mode */
@@ -21,5 +38,7 @@
 guint icd_wlan_defs_get_secmode (const gchar *iap_name);
 
 gboolean icd_wlan_defs_is_wlan (const gchar *network_type);
+
+/** @} */
 
 #endif

@@ -1,3 +1,9 @@
+/**
+@file icd_version.c
+
+@copyright GNU GPLv2 or later
+ */
+
 #include <stdlib.h>
 #include "icd_version.h"
 #include "icd_log.h"
@@ -43,3 +49,5 @@ icd_version_compare(const char *a, const char *b)
 
   return rv;
 }
+
+/** @} */

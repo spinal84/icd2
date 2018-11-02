@@ -10,9 +10,14 @@
 #include "icd_dbus.h"
 #include "icd_log.h"
 
-#define CHANGE_WHILE_CONNECTED_KEY ICD_GCONF_NETWORK_MAPPING "/change_while_connected"
+#define CHANGE_WHILE_CONNECTED_KEY ICD_GCONF_NETWORK_MAPPING \
+                                                "/change_while_connected"
 #define AUTO_CONNECT_KEY ICD_GCONF_NETWORK_MAPPING "/auto_connect"
 #define SEARCH_INTERVAL_KEY ICD_GCONF_NETWORK_MAPPING "/search_interval"
+
+#define POLICY_ALWAYS_ONLINE_IAP_TIMEOUT   500
+#define POLICY_ALWAYS_ONLINE_MCE_FILTER   "member='" MCE_DEVICE_MODE_SIG "'"
+#define POLICY_ALWAYS_ONLINE_MCE_TIMEOUT   5000
 
 struct always_online_data
 {
@@ -303,8 +308,8 @@ network_type_notify_cb(GConfClient *client, guint cnxn_id, GConfEntry *entry,
 
   if (!data->count_iaps_id)
   {
-    data->count_iaps_id =
-        g_timeout_add(500, check_connections_cb, data);
+    data->count_iaps_id = g_timeout_add(POLICY_ALWAYS_ONLINE_IAP_TIMEOUT,
+                                        check_connections_cb, data);
   }
 }
 
@@ -319,8 +324,8 @@ iap_notify_cb(GConfClient *client, guint cnxn_id, GConfEntry *entry,
   {
     ILOG_DEBUG("always online will soon check whether connections were added");
 
-    data->count_iaps_id =
-        g_timeout_add(500, check_connections_cb, data);
+    data->count_iaps_id = g_timeout_add(POLICY_ALWAYS_ONLINE_IAP_TIMEOUT,
+                                        check_connections_cb, data);
   }
 }
 
@@ -339,9 +344,11 @@ icd_policy_always_online_destruct(gpointer *private)
   }
 
   if (data->flightmode_signals)
+  {
     icd_dbus_disconnect_system_bcast_signal(MCE_SIGNAL_IF,
                                             device_mode_ind_filter, data,
-                                            "member='" MCE_DEVICE_MODE_SIG "'");
+                                            POLICY_ALWAYS_ONLINE_MCE_FILTER);
+  }
 
   if (data->notify_nw_params)
   {
@@ -479,7 +486,7 @@ icd_policy_init(struct icd_policy_api *policy_api,
 
   data->flightmode_signals = icd_dbus_connect_system_bcast_signal(
         MCE_SIGNAL_IF, device_mode_ind_filter, data,
-        "member='" MCE_DEVICE_MODE_SIG "'");
+        POLICY_ALWAYS_ONLINE_MCE_FILTER);
 
   if (!data->flightmode_signals)
     goto failed;
@@ -494,8 +501,9 @@ icd_policy_init(struct icd_policy_api *policy_api,
     goto failed;
   }
 
-  data->pending_flightmode =
-      icd_dbus_send_system_mcall(message, 5000, get_device_mode_cb, data);
+  data->pending_flightmode = icd_dbus_send_system_mcall(
+        message, POLICY_ALWAYS_ONLINE_MCE_TIMEOUT,
+        get_device_mode_cb, data);
 
   if (!data->pending_flightmode)
   {

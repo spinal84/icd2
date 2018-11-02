@@ -10,10 +10,11 @@
 
 #define POLICY_IAP_ASK_TIMEOUT 10 * 1000
 
-struct policy_ask_data {
+struct policy_iap_ask_data
+{
   gpointer *private;
-  DBusPendingCall *pending;
-  struct icd_policy_request *new_request;
+  DBusPendingCall *pending_call;
+  struct icd_policy_request *request;
   icd_policy_request_new_cb_fn policy_done_cb;
   gpointer policy_token;
 };
@@ -33,12 +34,12 @@ string_equal(const char *a, const char *b)
 static void
 flight_mode_exit_cb(DBusPendingCall *pending, void *user_data)
 {
-  struct policy_ask_data *data = (struct policy_ask_data *)user_data;
+  struct policy_iap_ask_data *data = (struct policy_iap_ask_data *)user_data;
   DBusMessage *reply = dbus_pending_call_steal_reply(pending);
   enum icd_policy_status policy_status;
 
-  dbus_pending_call_unref(data->pending);
-  data->pending = NULL;
+  dbus_pending_call_unref(data->pending_call);
+  data->pending_call = NULL;
 
   if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR)
     policy_status = ICD_POLICY_REJECTED;
@@ -50,7 +51,7 @@ flight_mode_exit_cb(DBusPendingCall *pending, void *user_data)
   ILOG_DEBUG("policy iap ask exit flight mode dialog responded (%d)",
              policy_status);
 
-  data->policy_done_cb(policy_status, data->new_request, data->policy_token);
+  data->policy_done_cb(policy_status, data->request, data->policy_token);
   *(data->private) = g_slist_remove((GSList *)*(data->private), data);
   g_free(data);
 }
@@ -58,7 +59,7 @@ flight_mode_exit_cb(DBusPendingCall *pending, void *user_data)
 static void
 show_conn_dlg_cb(DBusPendingCall *pending, void *user_data)
 {
-  struct policy_ask_data *data = (struct policy_ask_data *)user_data;;
+  struct policy_iap_ask_data *data = (struct policy_iap_ask_data *)user_data;;
   DBusMessage *reply;
   enum icd_policy_status type;
   DBusMessage *message;
@@ -69,8 +70,8 @@ show_conn_dlg_cb(DBusPendingCall *pending, void *user_data)
 
   ILOG_DEBUG("policy iap ask pending returned");
 
-  dbus_pending_call_unref(data->pending);
-  data->pending = NULL;
+  dbus_pending_call_unref(data->pending_call);
+  data->pending_call = NULL;
   type = dbus_message_get_type(reply);
 
   if (type == DBUS_MESSAGE_TYPE_ERROR)
@@ -92,11 +93,11 @@ show_conn_dlg_cb(DBusPendingCall *pending, void *user_data)
                                      DBUS_TYPE_INVALID))
         {
           ILOG_DEBUG("policy iap asking to exit flight mode");
-          data->pending = icd_dbus_send_system_mcall(message,
+          data->pending_call = icd_dbus_send_system_mcall(message,
               POLICY_IAP_ASK_TIMEOUT, flight_mode_exit_cb, data);
           dbus_message_unref(message);
 
-          if (data->pending)
+          if (data->pending_call)
           {
             dbus_message_unref(reply);
             return;
@@ -111,7 +112,7 @@ show_conn_dlg_cb(DBusPendingCall *pending, void *user_data)
       else
         ILOG_ERR("policy iap ask could not create exit flightmode request");
 
-      data->policy_done_cb(ICD_POLICY_REJECTED, data->new_request,
+      data->policy_done_cb(ICD_POLICY_REJECTED, data->request,
                            data->policy_token);
       *(data->private) = g_slist_remove((GSList *)*(data->private), data);
       g_free(data);
@@ -125,7 +126,7 @@ show_conn_dlg_cb(DBusPendingCall *pending, void *user_data)
   dbus_message_unref(reply);
   ILOG_DEBUG("'Select connection' dialog responded (%d)", policy_status);
 
-  data->policy_done_cb(policy_status, data->new_request, data->policy_token);
+  data->policy_done_cb(policy_status, data->request, data->policy_token);
   *(data->private) = g_slist_remove((GSList *)*(data->private), data);
   g_free(data);
 }
@@ -138,7 +139,7 @@ icd_policy_ask_request_new(struct icd_policy_request *new_request,
 {
   if (!strcmp(OSSO_IAP_ASK, new_request->network_id))
   {
-    struct policy_ask_data *data;
+    struct policy_iap_ask_data *data;
     DBusMessage *message;
     dbus_bool_t failed = FALSE;
 
@@ -168,20 +169,20 @@ icd_policy_ask_request_new(struct icd_policy_request *new_request,
       goto reject;
     }
 
-    data = g_new0(struct policy_ask_data, 1);
+    data = g_new0(struct policy_iap_ask_data, 1);
     data->private = private;
-    data->new_request = new_request;
+    data->request = new_request;
     data->policy_done_cb = policy_done_cb;
     data->policy_token = policy_token;
     *private = g_slist_prepend((GSList*)*private, data);
 
     ILOG_DEBUG("Requesting 'Select connection' dialog");
 
-    data->pending = icd_dbus_send_system_mcall(
+    data->pending_call = icd_dbus_send_system_mcall(
         message, POLICY_IAP_ASK_TIMEOUT, show_conn_dlg_cb, data);
     dbus_message_unref(message);
 
-    if (!data->pending)
+    if (!data->pending_call)
     {
       policy_done_cb(ICD_POLICY_REJECTED, new_request, policy_token);
       *private = g_slist_remove((GSList *)*private, data);
@@ -205,11 +206,11 @@ icd_policy_ask_request_cancel(struct icd_policy_request *request,
 
   for (l = (GSList *)*private; l; l = l->next)
   {
-    struct policy_ask_data *priv = (struct policy_ask_data *)l->data;
+    struct policy_iap_ask_data *priv = (struct policy_iap_ask_data *)l->data;
 
     if (priv)
     {
-      struct icd_policy_request *new_request = priv->new_request;
+      struct icd_policy_request *new_request = priv->request;
 
       if ((request->network_attrs & ICD_NW_ATTR_LOCALMASK) ==
           (new_request->network_attrs & ICD_NW_ATTR_LOCALMASK) &&
@@ -221,7 +222,7 @@ icd_policy_ask_request_cancel(struct icd_policy_request *request,
                    request->network_id);
 
         *(priv->private) = g_slist_remove((GSList *)*(priv->private), priv);
-        dbus_pending_call_cancel(priv->pending);
+        dbus_pending_call_cancel(priv->pending_call);
         g_free(priv);
       }
     }

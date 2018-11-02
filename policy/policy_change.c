@@ -134,6 +134,34 @@ policy_change_confirm_cb(DBusPendingCall *pending, void *user_data)
   dbus_message_unref(message);
 }
 
+static gboolean
+policy_change_confirm(struct policy_change_data *data)
+{
+  gboolean result = FALSE;
+  ILOG_DEBUG("policy change sending confirm");
+  DBusMessage *message = dbus_message_new_method_call(ICD_UI_DBUS_SERVICE,
+                                                      ICD_UI_DBUS_PATH,
+                                                      ICD_UI_DBUS_INTERFACE,
+                                                      ICD_UI_SHOW_CHANGE_REQ);
+  if (message)
+  {
+    if (dbus_message_append_args(message,
+                                 DBUS_TYPE_STRING, &data->change_from,
+                                 DBUS_TYPE_STRING, &data->change_to,
+                                 DBUS_TYPE_INVALID))
+    {
+      data->change_call = icd_dbus_send_system_mcall(
+          message, POLICY_CHANGE_CALL_TIMEOUT, policy_change_confirm_cb, data);
+      data->is_changing = TRUE;
+      result = TRUE;
+    }
+
+    dbus_message_unref(message);
+  }
+
+  return result;
+}
+
 static void
 policy_change_new_request(struct icd_policy_request *new_request,
                           const GSList *existing_requests,
@@ -142,7 +170,6 @@ policy_change_new_request(struct icd_policy_request *new_request,
 {
   struct policy_change_data *data = (struct policy_change_data *)*private;
   guint policy_attrs;
-  DBusMessage *message;
 
   if (existing_requests)
   {
@@ -192,28 +219,7 @@ policy_change_new_request(struct icd_policy_request *new_request,
         return;
       }
       else
-      {
-        ILOG_DEBUG("policy change sending confirm");
-
-        message = dbus_message_new_method_call(ICD_UI_DBUS_SERVICE,
-                                               ICD_UI_DBUS_PATH,
-                                               ICD_UI_DBUS_INTERFACE,
-                                               ICD_UI_SHOW_CHANGE_REQ);
-        if (message)
-        {
-          if (dbus_message_append_args(message,
-                                       DBUS_TYPE_STRING, &data->change_from,
-                                       DBUS_TYPE_STRING, &data->change_to,
-                                       DBUS_TYPE_INVALID))
-          {
-            data->change_call = icd_dbus_send_system_mcall(
-                message, POLICY_CHANGE_CALL_TIMEOUT, policy_change_confirm_cb, data);
-            data->is_changing = TRUE;
-          }
-
-          dbus_message_unref(message);
-        }
-      }
+        policy_change_confirm(data);
 
       if (!data->change_call)
       {

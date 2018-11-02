@@ -23,7 +23,7 @@ struct policy_change_data
 };
 
 static void
-cancel_pending_call(struct policy_change_data *data)
+policy_change_delete_data(struct policy_change_data *data)
 {
   if (data->change_call)
   {
@@ -38,11 +38,12 @@ cancel_pending_call(struct policy_change_data *data)
 }
 
 static void
-policy_done(enum icd_policy_status status, struct policy_change_data *data)
+policy_change_do_cb(enum icd_policy_status status,
+                    struct policy_change_data *data)
 {
   icd_policy_request_new_cb_fn policy_done_cb = data->done_cb;
 
-  cancel_pending_call(data);
+  policy_change_delete_data(data);
 
   if (policy_done_cb)
     policy_done_cb(status, data->new_request, data->done_token);
@@ -56,14 +57,16 @@ policy_done(enum icd_policy_status status, struct policy_change_data *data)
 }
 
 static DBusHandlerResult
-change_cb(DBusConnection *connection, DBusMessage *message, void *user_data)
+policy_change_done(DBusConnection *connection,
+                   DBusMessage *message,
+                   void *user_data)
 {
   if (dbus_message_is_signal(message, ICD_UI_DBUS_INTERFACE, ICD_UI_CHANGE_SIG))
   {
     struct policy_change_data *data = (struct policy_change_data *)user_data;
     dbus_bool_t accepted = FALSE;
-    gchar *change_to;
     gchar *change_from;
+    gchar *change_to;
 
     if (dbus_message_get_args(message, NULL,
                               DBUS_TYPE_STRING, &change_from,
@@ -81,34 +84,36 @@ change_cb(DBusConnection *connection, DBusMessage *message, void *user_data)
       }
       else
       {
-        ILOG_ERR("policy change expected change from '%s' to '%s', got '%s' and '%s'",
-                 data->change_from, data->change_to, change_from,
-                 change_to);
+        ILOG_ERR("policy change expected change from '%s' to '%s', "
+                 "got '%s' and '%s'", data->change_from, data->change_to,
+                 change_from, change_to);
       }
     }
     else
       ILOG_WARN("policy change could not get message args");
 
-    policy_done(accepted ? ICD_POLICY_ACCEPTED : ICD_POLICY_REJECTED, data);
+    policy_change_do_cb(
+                  accepted ? ICD_POLICY_ACCEPTED : ICD_POLICY_REJECTED, data);
   }
 
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
 static void
-icd_policy_change_destruct(gpointer *private)
+policy_change_destruct(gpointer *private)
 {
   struct policy_change_data *data = (struct policy_change_data *)*private;
 
-  icd_dbus_disconnect_system_bcast_signal(ICD_UI_DBUS_INTERFACE, change_cb,
-                                          data, POLICY_CHANGE_EXTRA_FILTER);
-  cancel_pending_call(data);
+  icd_dbus_disconnect_system_bcast_signal(ICD_UI_DBUS_INTERFACE,
+                                          policy_change_done, data,
+                                          POLICY_CHANGE_EXTRA_FILTER);
+  policy_change_delete_data(data);
   g_free(data);
   *private = NULL;
 }
 
 static void
-show_change_dlg_cb(DBusPendingCall *pending, void *user_data)
+policy_change_confirm_cb(DBusPendingCall *pending, void *user_data)
 {
   struct policy_change_data *data = (struct policy_change_data *)user_data;
   DBusMessage *message = dbus_pending_call_steal_reply(pending);
@@ -118,23 +123,24 @@ show_change_dlg_cb(DBusPendingCall *pending, void *user_data)
 
   if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR)
   {
-    ILOG_INFO("policy change confirmation dialog rejected change from '%s' to '%s'",
-              data->change_from, data->change_to);
+    ILOG_INFO("policy change confirmation dialog rejected change "
+              "from '%s' to '%s'", data->change_from, data->change_to);
   }
   else
-    ILOG_WARN("policy change dialog confirmed but actual dialog not implemented; bug in dialogs!");
+    ILOG_WARN("policy change dialog confirmed but actual dialog "
+              "not implemented; bug in dialogs!");
 
-  policy_done(ICD_POLICY_REJECTED, data);
+  policy_change_do_cb(ICD_POLICY_REJECTED, data);
   dbus_message_unref(message);
 }
 
 static void
-icd_policy_change_new_request(struct icd_policy_request *new_request,
-                              const GSList *existing_requests,
-                              icd_policy_request_new_cb_fn policy_done_cb,
-                              gpointer policy_token, gpointer *privat)
+policy_change_new_request(struct icd_policy_request *new_request,
+                          const GSList *existing_requests,
+                          icd_policy_request_new_cb_fn policy_done_cb,
+                          gpointer policy_token, gpointer *private)
 {
-  struct policy_change_data *data = (struct policy_change_data *)*privat;
+  struct policy_change_data *data = (struct policy_change_data *)*private;
   guint policy_attrs;
   DBusMessage *message;
 
@@ -145,8 +151,8 @@ icd_policy_change_new_request(struct icd_policy_request *new_request,
 
     if (new_request->attrs & ICD_POLICY_ATTRIBUTE_BACKGROUND)
     {
-      ILOG_INFO("policy change not accepted for req %p with ICD_POLICY_ATTRIBUTE_BACKGROUND",
-                new_request);
+      ILOG_INFO("policy change not accepted for req %p "
+                "with ICD_POLICY_ATTRIBUTE_BACKGROUND", new_request);
       policy_done_cb(ICD_POLICY_REJECTED, new_request, policy_token);
       return;
     }
@@ -174,14 +180,15 @@ icd_policy_change_new_request(struct icd_policy_request *new_request,
     {
       ILOG_INFO("policy change from '%s' to maybe '%s'", data->change_from,
                 data->change_to);
-      policy_done(ICD_POLICY_ACCEPTED, data);
+      policy_change_do_cb(ICD_POLICY_ACCEPTED, data);
     }
     else
     {
       if (policy_attrs & ICD_POLICY_ATTRIBUTE_NO_INTERACTION)
       {
-        ILOG_INFO("policy change cannot ask for dialog since ICD_POLICY_ATTRIBUTE_NO_INTERACTION set");
-        policy_done(ICD_POLICY_REJECTED, data);
+        ILOG_INFO("policy change cannot ask for dialog "
+                  "since ICD_POLICY_ATTRIBUTE_NO_INTERACTION set");
+        policy_change_do_cb(ICD_POLICY_REJECTED, data);
         return;
       }
       else
@@ -200,7 +207,7 @@ icd_policy_change_new_request(struct icd_policy_request *new_request,
                                        DBUS_TYPE_INVALID))
           {
             data->change_call = icd_dbus_send_system_mcall(
-                message, POLICY_CHANGE_CALL_TIMEOUT, show_change_dlg_cb, data);
+                message, POLICY_CHANGE_CALL_TIMEOUT, policy_change_confirm_cb, data);
             data->is_changing = TRUE;
           }
 
@@ -212,7 +219,7 @@ icd_policy_change_new_request(struct icd_policy_request *new_request,
       {
         ILOG_ERR("policy change cannot be confirmed, rejecting req %p",
                  new_request);
-        policy_done(ICD_POLICY_REJECTED, data);
+        policy_change_do_cb(ICD_POLICY_REJECTED, data);
       }
     }
   }
@@ -233,9 +240,10 @@ icd_policy_init(struct icd_policy_api *policy_api,
 {
   struct policy_change_data *data = g_new0(struct policy_change_data, 1);
 
-  policy_api->new_request = icd_policy_change_new_request;
+  policy_api->new_request = policy_change_new_request;
   policy_api->private = data;
-  policy_api->destruct = icd_policy_change_destruct;
-  icd_dbus_connect_system_bcast_signal(ICD_UI_DBUS_INTERFACE, change_cb, data,
+  policy_api->destruct = policy_change_destruct;
+  icd_dbus_connect_system_bcast_signal(ICD_UI_DBUS_INTERFACE,
+                                       policy_change_done, data,
                                        POLICY_CHANGE_EXTRA_FILTER);
 }

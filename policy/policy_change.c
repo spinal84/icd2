@@ -8,7 +8,8 @@
 #include "policy_api.h"
 #include "icd_log.h"
 
-#define ICD_UI_FILTER_CHANGE_SIG "member='"ICD_UI_CHANGE_SIG"'"
+#define POLICY_CHANGE_CALL_TIMEOUT 10 * 1000
+#define POLICY_CHANGE_EXTRA_FILTER "member='" ICD_UI_CHANGE_SIG "'"
 
 struct policy_change_data
 {
@@ -100,7 +101,7 @@ icd_policy_change_destruct(gpointer *private)
   struct policy_change_data *data = (struct policy_change_data *)*private;
 
   icd_dbus_disconnect_system_bcast_signal(ICD_UI_DBUS_INTERFACE, change_cb,
-                                          data, ICD_UI_FILTER_CHANGE_SIG);
+                                          data, POLICY_CHANGE_EXTRA_FILTER);
   cancel_pending_call(data);
   g_free(data);
   *private = NULL;
@@ -198,9 +199,8 @@ icd_policy_change_new_request(struct icd_policy_request *new_request,
                                        DBUS_TYPE_STRING, &data->new_network_id,
                                        DBUS_TYPE_INVALID))
           {
-            data->pending = icd_dbus_send_system_mcall(message, 10000,
-                                                       show_change_dlg_cb,
-                                                       data);
+            data->pending = icd_dbus_send_system_mcall(
+                message, POLICY_CHANGE_CALL_TIMEOUT, show_change_dlg_cb, data);
             data->processing = TRUE;
           }
 
@@ -237,5 +237,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
   policy_api->private = data;
   policy_api->destruct = icd_policy_change_destruct;
   icd_dbus_connect_system_bcast_signal(ICD_UI_DBUS_INTERFACE, change_cb, data,
-                                       ICD_UI_FILTER_CHANGE_SIG);
+                                       POLICY_CHANGE_EXTRA_FILTER);
 }

@@ -8,6 +8,8 @@
 #include "policy_api.h"
 #include "icd_log.h"
 
+#define POLICY_IAP_ASK_TIMEOUT 10 * 1000
+
 struct policy_ask_data {
   gpointer *private;
   DBusPendingCall *pending;
@@ -90,8 +92,8 @@ show_conn_dlg_cb(DBusPendingCall *pending, void *user_data)
                                      DBUS_TYPE_INVALID))
         {
           ILOG_DEBUG("policy iap asking to exit flight mode");
-          data->pending = icd_dbus_send_system_mcall(message, 10000,
-                                                     flight_mode_exit_cb, data);
+          data->pending = icd_dbus_send_system_mcall(message,
+              POLICY_IAP_ASK_TIMEOUT, flight_mode_exit_cb, data);
           dbus_message_unref(message);
 
           if (data->pending)
@@ -175,8 +177,8 @@ icd_policy_ask_request_new(struct icd_policy_request *new_request,
 
     ILOG_DEBUG("Requesting 'Select connection' dialog");
 
-    data->pending = icd_dbus_send_system_mcall(message, 10000,
-                                               show_conn_dlg_cb, data);
+    data->pending = icd_dbus_send_system_mcall(
+        message, POLICY_IAP_ASK_TIMEOUT, show_conn_dlg_cb, data);
     dbus_message_unref(message);
 
     if (!data->pending)

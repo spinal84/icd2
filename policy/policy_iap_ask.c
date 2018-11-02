@@ -57,14 +57,50 @@ policy_iap_ask_flightmode_pending(DBusPendingCall *pending, void *user_data)
 }
 
 static void
+policy_iap_ask_flightmode(struct policy_iap_ask_data *data)
+{
+  DBusMessage *message = dbus_message_new_method_call(ICD_UI_DBUS_SERVICE,
+                                                      ICD_UI_DBUS_PATH,
+                                                      ICD_UI_DBUS_INTERFACE,
+                                                      ICD_UI_SHOW_RETRY_REQ);
+  if (message)
+  {
+    const gchar *error_flight_mode = ICD_DBUS_ERROR_FLIGHT_MODE;
+    const gchar *ask = OSSO_IAP_ASK;
+    if (dbus_message_append_args(message,
+                                 DBUS_TYPE_STRING, &ask,
+                                 DBUS_TYPE_STRING, &error_flight_mode,
+                                 DBUS_TYPE_INVALID))
+    {
+      ILOG_DEBUG("policy iap asking to exit flight mode");
+      data->pending_call = icd_dbus_send_system_mcall(message,
+              POLICY_IAP_ASK_TIMEOUT, policy_iap_ask_flightmode_pending, data);
+      dbus_message_unref(message);
+
+      if (data->pending_call)
+        return;
+    }
+    else
+    {
+      ILOG_ERR("policy iap ask could not append args "
+               "to exit flightmode request");
+      dbus_message_unref(message);
+    }
+  }
+  else
+    ILOG_ERR("policy iap ask could not create exit flightmode request");
+
+  data->policy_done_cb(ICD_POLICY_REJECTED, data->request, data->policy_token);
+  *(data->private) = g_slist_remove((GSList *)*(data->private), data);
+  g_free(data);
+}
+
+static void
 policy_iap_ask_pending(DBusPendingCall *pending, void *user_data)
 {
   struct policy_iap_ask_data *data = (struct policy_iap_ask_data *)user_data;;
   DBusMessage *reply;
   enum icd_policy_status type;
-  DBusMessage *message;
-  const char *error_flight_mode;
-  const char *ask;
   enum icd_policy_status policy_status = ICD_POLICY_REJECTED;
   reply = dbus_pending_call_steal_reply(pending);
 
@@ -79,43 +115,7 @@ policy_iap_ask_pending(DBusPendingCall *pending, void *user_data)
     if (dbus_message_is_error(reply, ICD_UI_DBUS_ERROR_FLIGHT_MODE))
     {
       ILOG_DEBUG("policy iap ask flight mode error returned");
-      ask = OSSO_IAP_ASK;
-      error_flight_mode = ICD_DBUS_ERROR_FLIGHT_MODE;
-      message = dbus_message_new_method_call(ICD_UI_DBUS_SERVICE,
-                                             ICD_UI_DBUS_PATH,
-                                             ICD_UI_DBUS_INTERFACE,
-                                             ICD_UI_SHOW_RETRY_REQ);
-      if (message)
-      {
-        if (dbus_message_append_args(message,
-                                     DBUS_TYPE_STRING, &ask,
-                                     DBUS_TYPE_STRING, &error_flight_mode,
-                                     DBUS_TYPE_INVALID))
-        {
-          ILOG_DEBUG("policy iap asking to exit flight mode");
-          data->pending_call = icd_dbus_send_system_mcall(message,
-              POLICY_IAP_ASK_TIMEOUT, policy_iap_ask_flightmode_pending, data);
-          dbus_message_unref(message);
-
-          if (data->pending_call)
-          {
-            dbus_message_unref(reply);
-            return;
-          }
-        }
-        else
-        {
-          ILOG_ERR("policy iap ask could not append args to exit flightmode request");
-          dbus_message_unref(message);
-        }
-      }
-      else
-        ILOG_ERR("policy iap ask could not create exit flightmode request");
-
-      data->policy_done_cb(ICD_POLICY_REJECTED, data->request,
-                           data->policy_token);
-      *(data->private) = g_slist_remove((GSList *)*(data->private), data);
-      g_free(data);
+      policy_iap_ask_flightmode(data);
       dbus_message_unref(reply);
       return;
     }

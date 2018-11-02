@@ -69,6 +69,17 @@ policy_always_online_count_iaps()
 }
 
 static void
+policy_always_online_cancel_pending(struct always_online_data *data)
+{
+  if (data->pending_flightmode)
+  {
+    ILOG_INFO("always online cancelling pending call");
+    dbus_pending_call_cancel(data->pending_flightmode);
+    data->pending_flightmode = 0;
+  }
+}
+
+static void
 policy_always_online_cancel_timer(struct always_online_data *data)
 {
   if (data->timeout_id)
@@ -78,6 +89,20 @@ policy_always_online_cancel_timer(struct always_online_data *data)
     g_source_remove(data->timeout_id);
     data->timeout_id = 0;
   }
+}
+
+static void
+policy_always_online_make_request(struct always_online_data *data)
+{
+  guint policy_attrs = ICD_POLICY_ATTRIBUTE_NO_INTERACTION |
+                       ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE;
+
+  ILOG_INFO("always online making new request");
+
+  if (data->always_change)
+    policy_attrs |= ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE_CHANGE;
+
+  data->make_request(policy_attrs, NULL, 0, NULL, NULL, 0, OSSO_IAP_ANY);
 }
 
 static gboolean
@@ -207,17 +232,7 @@ policy_always_online_run(struct always_online_data *data,
              data->highest_network_priority);
 
   if (immediately)
-  {
-    guint policy_attrs = ICD_POLICY_ATTRIBUTE_NO_INTERACTION |
-                         ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE;
-
-    ILOG_INFO("always online making new request");
-
-    if (data->always_change)
-      policy_attrs |= ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE_CHANGE;
-
-    data->make_request(policy_attrs, NULL, 0, NULL, NULL, 0, OSSO_IAP_ANY);
-  }
+    policy_always_online_make_request(data);
 
   data->timeout_id = g_timeout_add(1000 * data->timeout,
                                    policy_always_online_make_request_cb, data);
@@ -340,12 +355,7 @@ policy_always_online_destruct(gpointer *private)
       (struct always_online_data *)*private;
   GConfClient *gconf = gconf_client_get_default();
 
-  if (data->pending_flightmode)
-  {
-    ILOG_INFO("always online cancelling pending call");
-    dbus_pending_call_cancel(data->pending_flightmode);
-    data->pending_flightmode = 0;
-  }
+  policy_always_online_cancel_pending(data);
 
   if (data->flightmode_signals)
   {
@@ -441,6 +451,78 @@ policy_always_online_connected(struct icd_policy_request *network,
     policy_always_online_cancel_timer(data);
 }
 
+static gboolean
+policy_always_online_flightmode_init(struct always_online_data *data)
+{
+  DBusMessage *message = dbus_message_new_method_call(
+      MCE_SERVICE, MCE_REQUEST_PATH, MCE_REQUEST_IF, MCE_DEVICE_MODE_GET);
+
+  if (!message)
+  {
+    ILOG_CRIT("always online could not create flightmode request message");
+    return FALSE;
+  }
+
+  data->pending_flightmode = icd_dbus_send_system_mcall(
+        message, POLICY_ALWAYS_ONLINE_MCE_TIMEOUT,
+        policy_always_online_flightmode_cb, data);
+
+  if (!data->pending_flightmode)
+  {
+    ILOG_CRIT("always online could not send flightmode request");
+    dbus_message_unref(message);
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static gboolean
+policy_always_online_gconf_init(struct always_online_data *data)
+{
+  GConfClient *gconf = gconf_client_get_default();
+  GError *error = NULL;
+
+  data->notify_nw_params = gconf_client_notify_add(
+      gconf, ICD_GCONF_NETWORK_MAPPING, policy_always_online_nw_params_changed,
+      data, NULL, &error);
+
+  if (!error)
+  {
+    data->notify_connections = gconf_client_notify_add(
+          gconf, ICD_GCONF_PATH, policy_always_online_connections_changed,
+          data, NULL, &error);
+  }
+
+  if (error)
+  {
+    ILOG_ERR("always online gconf notification error: %s", error->message);
+    g_clear_error(&error);
+    g_object_unref(gconf);
+    return FALSE;
+  }
+
+  gconf_client_add_dir(gconf, ICD_GCONF_NETWORK_MAPPING,
+                       GCONF_CLIENT_PRELOAD_ONELEVEL, &error);
+
+  if (!error)
+  {
+    gconf_client_add_dir(gconf, ICD_GCONF_PATH,
+                         GCONF_CLIENT_PRELOAD_ONELEVEL, &error);
+  }
+
+  if (error)
+  {
+    ILOG_ERR("always online gconf add dir error: %s", error->message);
+    g_clear_error(&error);
+    g_object_unref(gconf);
+    return FALSE;
+  }
+
+  g_object_unref(gconf);
+  return TRUE;
+}
+
 void
 icd_policy_init(struct icd_policy_api *policy_api,
                 icd_policy_nw_add_fn add_network,
@@ -455,9 +537,7 @@ icd_policy_init(struct icd_policy_api *policy_api,
   GConfClient *gconf = gconf_client_get_default();
   struct always_online_data *data =
       g_new0(struct always_online_data, 1);
-  GError *error = NULL;
   GConfValue *val;
-  DBusMessage *message;
 
   policy_api->private = data;
 
@@ -493,76 +573,19 @@ icd_policy_init(struct icd_policy_api *policy_api,
         MCE_SIGNAL_IF, policy_always_online_flightmode_sig, data,
         POLICY_ALWAYS_ONLINE_MCE_FILTER);
 
-  if (!data->flightmode_signals)
-    goto failed;
-
-  message = dbus_message_new_method_call(MCE_SERVICE,
-                                         MCE_REQUEST_PATH,
-                                         MCE_REQUEST_IF,
-                                         MCE_DEVICE_MODE_GET);
-  if (!message)
+  if (!data->flightmode_signals ||
+      !policy_always_online_flightmode_init(data) ||
+      !policy_always_online_gconf_init(data) )
   {
-    ILOG_CRIT("always online could not create flightmode request message");
-    goto failed;
+    ILOG_CRIT("always online failed to connect, always online disabled");
+    policy_always_online_destruct((gpointer *)&data);
+        return;
   }
 
-  data->pending_flightmode = icd_dbus_send_system_mcall(
-        message, POLICY_ALWAYS_ONLINE_MCE_TIMEOUT,
-        policy_always_online_flightmode_cb, data);
-
-  if (!data->pending_flightmode)
-  {
-    ILOG_CRIT("always online could not send flightmode request");
-    dbus_message_unref(message);
-    goto failed;
-  }
-
-  gconf = gconf_client_get_default();
-  data->notify_nw_params = gconf_client_notify_add(
-      gconf, ICD_GCONF_NETWORK_MAPPING, policy_always_online_nw_params_changed,
-      data, NULL, &error);
-
-  if (!error)
-  {
-    gconf_client_add_dir(gconf, ICD_GCONF_NETWORK_MAPPING,
-                         GCONF_CLIENT_PRELOAD_ONELEVEL, &error);
-
-    if (!error)
-    {
-      data->notify_connections = gconf_client_notify_add(
-            gconf, ICD_GCONF_PATH, policy_always_online_connections_changed,
-            data, NULL, &error);
-
-      if (!error)
-      {
-        gconf_client_add_dir(gconf, ICD_GCONF_PATH,
-                             GCONF_CLIENT_PRELOAD_ONELEVEL, &error);
-
-        if (!error)
-        {
-          g_object_unref(gconf);
-          data->priority = priority;
-          data->srv_check = srv_check;
-          policy_api->connected = policy_always_online_connected;
-          policy_api->disconnected = policy_always_online_disconnected;
-          policy_api->destruct = policy_always_online_destruct;
-          policy_api->priority = priority;
-          return;
-        }
-        else
-          ILOG_ERR("always online gconf add dir error: %s", error->message);
-      }
-      else
-        ILOG_ERR("always online gconf notification error: %s", error->message);
-    }
-    else
-      ILOG_ERR("always online gconf add dir error: %s", error->message);
-  }
-
-  g_clear_error(&error);
-  g_object_unref(gconf);
-
-failed:
-  ILOG_CRIT("always online failed to connect, always online disabled");
-  policy_always_online_destruct((gpointer *)&data);
+  data->priority = priority;
+  data->srv_check = srv_check;
+  policy_api->connected = policy_always_online_connected;
+  policy_api->disconnected = policy_always_online_disconnected;
+  policy_api->destruct = policy_always_online_destruct;
+  policy_api->priority = priority;
 }

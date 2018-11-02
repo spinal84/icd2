@@ -282,6 +282,192 @@ policy_any_get_prio(const GSList *existing_requests)
   return rv;
 }
 
+static struct policy_scan_data*
+policy_any_scan_data_new(struct policy_any_data *any_data,
+                         struct icd_policy_request *new_request,
+                         icd_policy_request_new_cb_fn policy_done_cb,
+                         gpointer policy_token)
+{
+  struct policy_scan_data *scan_data;
+  scan_data = g_new0(struct policy_scan_data, 1);
+  scan_data->any_data = any_data;
+  scan_data->policy_done_cb = policy_done_cb;
+  scan_data->policy_token = policy_token;
+  any_data->ongoing_scans = g_slist_prepend(any_data->ongoing_scans, scan_data);
+  return scan_data;
+}
+
+static GSList*
+policy_any_get_types(struct policy_any_data *data)
+{
+  GSList *auto_connect_list;
+  GConfClient *gconf = gconf_client_get_default();
+  GSList *scan_types_list_old;
+  GSList *scan_types_list;
+  GSList *iaps_list;
+  GError *err = NULL;
+
+  auto_connect_list = gconf_client_get_list(gconf, AUTO_CONNECT_KEY,
+                                            GCONF_VALUE_STRING, NULL);
+
+  if (auto_connect_list == NULL)
+  {
+    g_object_unref(gconf);
+    return NULL;
+  }
+
+  scan_types_list = auto_connect_list;
+  gchar *p = auto_connect_list->data;
+
+  if (p && !strcmp(p, "*"))
+  {
+    GSList *all_types_list;
+
+    if (auto_connect_list->next)
+      ILOG_WARN("any connection wildcard '*' allowed only by itself");
+
+    do
+    {
+      g_free(scan_types_list->data);
+      scan_types_list = g_slist_delete_link(scan_types_list, scan_types_list);
+    }
+    while (scan_types_list);
+
+    all_types_list = gconf_client_all_dirs(
+                           gconf, ICD_GCONF_NETWORK_MAPPING, &err);
+
+    if (err)
+    {
+      ILOG_WARN("any connection could not find network types for '*': %s",
+                err->message);
+      g_clear_error(&err);
+    }
+
+    if (all_types_list == NULL)
+    {
+      g_object_unref(gconf);
+      return NULL;
+    }
+
+    do
+    {
+      if (all_types_list->data)
+      {
+        p = g_strrstr((const gchar *)all_types_list->data, "/");
+
+        if (p && p != (gchar *)-1)
+        {
+          if (!strcmp(p, "*"))
+            ILOG_WARN("any connection wildcard '*' not allowed "
+                      "as network type name");
+          else
+          {
+            scan_types_list =
+                g_slist_prepend(scan_types_list, g_strdup(p + 1));
+          }
+        }
+
+        g_free(all_types_list->data);
+      }
+
+      all_types_list = g_slist_delete_link(all_types_list, all_types_list);
+    }
+    while (all_types_list);
+  }
+  else
+  {
+    GSList *l;
+
+    for (l = auto_connect_list; l; l = l->next)
+    {
+      gchar *s = l->data;
+
+      if (s && !strcmp(s, "*"))
+      {
+        ILOG_WARN("any connection wildcard '*' allowed only as first entry");
+        g_free(s);
+        scan_types_list = g_slist_delete_link(scan_types_list, l);
+      }
+    }
+  }
+
+  if (scan_types_list)
+  {
+    iaps_list = gconf_client_all_dirs(gconf, ICD_GCONF_PATH, NULL);
+
+    if (iaps_list)
+    {
+      scan_types_list_old = scan_types_list;
+      scan_types_list = NULL;
+
+      do
+      {
+        gchar *s = g_strconcat((const gchar *)iaps_list->data, "/type", NULL);
+
+        gchar *iap_type = gconf_client_get_string(gconf, s, NULL);
+        g_free(s);
+
+        if (iap_type)
+        {
+          GSList *l;
+
+          for (l = scan_types_list_old; l; l = l->next)
+          {
+            s = (gchar *)l->data;
+
+            if (!strcmp(s, iap_type))
+            {
+              scan_types_list = g_slist_prepend(scan_types_list, s);
+              scan_types_list_old = g_slist_delete_link(scan_types_list_old, l);
+              ILOG_DEBUG("network type '%s' IAP '%s' found in gconf",
+                      (gchar *)scan_types_list->data, (gchar *)iaps_list->data);
+              break;
+            }
+          }
+        }
+        else
+        {
+          ILOG_ERR("Cannot find %s/type, your gconf is perhaps corrupted. "
+                   "Skipping this IAP.", (gchar *)iaps_list->data);
+        }
+
+        g_free(iap_type);
+        g_free(iaps_list->data);
+        iaps_list = g_slist_delete_link(iaps_list, iaps_list);
+      }
+      while (iaps_list);
+    }
+    else
+    {
+      scan_types_list_old = scan_types_list;
+      scan_types_list = NULL;
+    }
+
+    while (scan_types_list_old)
+    {
+      if (data->srv_check((const gchar *)scan_types_list_old->data))
+      {
+        ILOG_DEBUG("service module found for network type '%s'",
+                   (gchar *)scan_types_list_old->data);
+        scan_types_list = g_slist_prepend(scan_types_list,
+                                        scan_types_list_old->data);
+      }
+      else
+      {
+        ILOG_DEBUG("network type '%s' IAPs not found in gconf",
+                   (gchar *)scan_types_list_old->data);
+        g_free(scan_types_list_old->data);
+      }
+
+      scan_types_list_old = g_slist_delete_link(scan_types_list_old,
+                                              scan_types_list_old);
+    }
+  }
+
+  g_object_unref(gconf);
+  return scan_types_list;
+}
+
 static void
 policy_any_new_request(struct icd_policy_request *new_request,
                        const GSList *existing_requests,
@@ -289,14 +475,7 @@ policy_any_new_request(struct icd_policy_request *new_request,
                        gpointer policy_token, gpointer *private)
 {
   struct policy_any_data *data = (struct policy_any_data *)*private;
-  GSList *candidates;
-  GConfClient *gconf;
   gboolean scan_started;
-  GSList *iaps;
-  char *type;
-  GSList *scan_types_list_old;
-  GSList *scan_types_list;
-  GError *err = NULL;
 
   if (strcmp(new_request->network_id, OSSO_IAP_ANY))
   {
@@ -317,8 +496,8 @@ policy_any_new_request(struct icd_policy_request *new_request,
 
     for (l = data->ongoing_scans; l; l = l->next)
     {
-      ILOG_ERR("any connection waiting for OSSO_IAP_ANY request %p scan_data %p reply",
-               data->request->request_token, l->data);
+      ILOG_ERR("any connection waiting for OSSO_IAP_ANY request %p "
+               "scan_data %p reply", data->request->request_token, l->data);
     }
 
     policy_done_cb(ICD_POLICY_REJECTED, new_request, policy_token);
@@ -327,160 +506,7 @@ policy_any_new_request(struct icd_policy_request *new_request,
   }
 
   data->request = new_request;
-  gconf = gconf_client_get_default();
-  candidates = gconf_client_get_list(gconf, AUTO_CONNECT_KEY,
-                                     GCONF_VALUE_STRING, NULL);
-  scan_types_list = candidates;
-
-  if (candidates)
-  {
-    char *p = candidates->data;
-
-    if (p && !strcmp(p, "*"))
-    {
-      GSList *types;
-
-      if (candidates->next)
-        ILOG_WARN("any connection wildcard '*' allowed only by itself");
-
-      do
-      {
-        g_free(scan_types_list->data);
-        scan_types_list = g_slist_delete_link(scan_types_list, scan_types_list);
-      }
-      while (scan_types_list);
-
-      types = gconf_client_all_dirs(gconf, ICD_GCONF_NETWORK_MAPPING, &err);
-
-      if (err)
-      {
-        ILOG_WARN("any connection could not find network types for '*': %s",
-                  err->message);
-        g_clear_error(&err);
-      }
-
-      if (!types)
-        goto skip;
-
-      do
-      {
-        if (types->data)
-        {
-          p = g_strrstr((const gchar *)types->data, "/");
-
-          if (p && p != (gchar *)-1)
-          {
-            if (!strcmp(p, "*"))
-              ILOG_WARN("any connection wildcard '*' not allowed as network type name");
-            else
-            {
-              scan_types_list =
-                  g_slist_prepend(scan_types_list, g_strdup(p + 1));
-            }
-          }
-
-          g_free(types->data);
-        }
-
-        types = g_slist_delete_link(types, types);
-      }
-      while (types);
-    }
-    else
-    {
-      GSList *l;
-
-      for (l = candidates; l; l = l->next)
-      {
-        gchar *s = l->data;
-
-        if (s && !strcmp(s, "*"))
-        {
-          ILOG_WARN("any connection wildcard '*' allowed only as first entry");
-          g_free(s);
-          scan_types_list = g_slist_delete_link(scan_types_list, l);
-        }
-      }
-    }
-
-    if (scan_types_list && g_slist_nth(scan_types_list, 0))
-    {
-      iaps = gconf_client_all_dirs(gconf, ICD_GCONF_PATH, NULL);
-
-      if (iaps)
-      {
-        scan_types_list_old = scan_types_list;
-        scan_types_list = NULL;
-
-        do
-        {
-          gchar *s = g_strconcat((const gchar *)iaps->data, "/type", NULL);
-
-          type = gconf_client_get_string(gconf, s, NULL);
-          g_free(s);
-
-          if (type)
-          {
-            GSList *l;
-
-            for (l = scan_types_list_old; l; l = l->next)
-            {
-              s = (gchar *)l->data;
-
-              if (!strcmp(s, type))
-              {
-                scan_types_list = g_slist_prepend(scan_types_list, s);
-                scan_types_list_old = g_slist_delete_link(scan_types_list_old, l);
-                ILOG_DEBUG("network type '%s' IAP '%s' found in gconf",
-                           (char *)scan_types_list->data, (char *)iaps->data);
-                break;
-              }
-            }
-          }
-          else
-          {
-            ILOG_ERR("Cannot find %s/type, your gconf is perhaps corrupted. Skipping this IAP.",
-                     (char *)iaps->data);
-          }
-
-          g_free(type);
-          g_free(iaps->data);
-          iaps = g_slist_delete_link(iaps, iaps);
-        }
-        while (iaps);
-      }
-      else
-      {
-        scan_types_list_old = scan_types_list;
-        scan_types_list = NULL;
-      }
-
-      while (scan_types_list_old)
-      {
-        if (data->srv_check((const gchar *)scan_types_list_old->data))
-        {
-          ILOG_DEBUG("service module found for network type '%s'",
-                     (char *)scan_types_list_old->data);
-          scan_types_list = g_slist_prepend(scan_types_list,
-                                          scan_types_list_old->data);
-        }
-        else
-        {
-          ILOG_DEBUG("network type '%s' IAPs not found in gconf",
-                     (char *)scan_types_list_old->data);
-          g_free(scan_types_list_old->data);
-        }
-
-        scan_types_list_old = g_slist_delete_link(scan_types_list_old,
-                                                scan_types_list_old);
-      }
-    }
-  }
-
-skip:
-  g_object_unref(gconf);
-
-  data->scan_types_list = scan_types_list;
+  data->scan_types_list = policy_any_get_types(data);
   data->min_prio = policy_any_get_prio(existing_requests);
 
   ILOG_DEBUG("any connection request %p scanning for networks with prio > %d",
@@ -496,14 +522,9 @@ skip:
 
     if (type && *type)
     {
-      struct policy_scan_data *scan_data;
-
+      struct policy_scan_data *scan_data = policy_any_scan_data_new(
+                          data, new_request, policy_done_cb, policy_token);
       ILOG_DEBUG("any connection starting scan for '%s'", type);
-      scan_data = g_new0(struct policy_scan_data, 1);
-      scan_data->any_data = data;
-      scan_data->policy_done_cb = policy_done_cb;
-      scan_data->policy_token = policy_token;
-      data->ongoing_scans = g_slist_prepend(data->ongoing_scans, scan_data);
       data->scan_start(type, ICD_NW_SEARCH_SCOPE_SAVED,
                        policy_any_scan_cb, scan_data);
       scan_started = TRUE;

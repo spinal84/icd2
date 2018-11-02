@@ -46,7 +46,7 @@ struct policy_any_network
 };
 
 static gboolean
-string_equal(const char *a, const char *b)
+policy_any_string_equal(const gchar *a, const gchar *b)
 {
   if (!a)
     return !b;
@@ -57,25 +57,27 @@ string_equal(const char *a, const char *b)
   return FALSE;
 }
 
-static int
-network_compare(struct policy_any_network *a, struct policy_any_network *b)
+static gint
+policy_any_sort_network(gconstpointer a, gconstpointer b)
 {
-  int rv = b->network_priority - a->network_priority;
+  struct policy_any_network *a_net = (struct policy_any_network *)a;
+  struct policy_any_network *b_net = (struct policy_any_network *)b;
+  gint rv = b_net->network_priority - a_net->network_priority;
 
   if (rv == 0)
-    rv = b->signal - a->signal;
+    rv = b_net->signal - a_net->signal;
 
   return rv;
 }
 
 static void
-scan_cb(const guint status, const gchar *service_name,
-        const gchar *service_type, const guint service_attrs,
-        const gchar *service_id, gint service_priority,
-        const gchar *network_name, const gchar *network_type,
-        const guint network_attrs, const gchar *network_id,
-        gint network_priority, const enum icd_nw_levels signal,
-        gpointer user_data)
+policy_any_scan_cb(const guint status, const gchar *service_name,
+                   const gchar *service_type, const guint service_attrs,
+                   const gchar *service_id, gint service_priority,
+                   const gchar *network_name, const gchar *network_type,
+                   const guint network_attrs, const gchar *network_id,
+                   gint network_priority, const enum icd_nw_levels signal,
+                   gpointer user_data)
 {
   struct policy_scan_data *scan_data = (struct policy_scan_data *)user_data;
   struct policy_any_data *data = scan_data->any_data;
@@ -85,7 +87,7 @@ scan_cb(const guint status, const gchar *service_name,
   {
     ILOG_DEBUG("any connection scan complete for '%s', scan data %p",
                network_type, scan_data);
-    scan_data->any_data->scan_stop(scan_cb, scan_data);
+    scan_data->any_data->scan_stop(policy_any_scan_cb, scan_data);
     data->ongoing_scans = g_slist_remove(data->ongoing_scans, scan_data);
 
     if (!data->ongoing_scans && !data->scan_types_list)
@@ -158,8 +160,8 @@ scan_cb(const guint status, const gchar *service_name,
 
       if ((network->network_attrs & ICD_NW_ATTR_LOCALMASK) ==
           (network_attrs & ICD_NW_ATTR_LOCALMASK) &&
-          string_equal(network->network_type, network_type) &&
-          string_equal(network->network_id, network_id))
+          policy_any_string_equal(network->network_type, network_type) &&
+          policy_any_string_equal(network->network_id, network_id))
       {
         data->found_networks = g_slist_remove(data->found_networks, network);
         g_free(network->service_type);
@@ -186,9 +188,8 @@ new_net:
             network->network_id = g_strdup(network_id);
             network->network_priority = network_priority;
             network->signal = signal;
-            data->found_networks =
-                g_slist_insert_sorted(data->found_networks, network,
-                                      (GCompareFunc)network_compare);
+            data->found_networks = g_slist_insert_sorted(
+                data->found_networks, network, policy_any_sort_network);
             scan_data->any_data->iaps_added = TRUE;
           }
 
@@ -203,8 +204,8 @@ new_net:
 }
 
 static void
-icd_policy_any_cancel_request(struct icd_policy_request *request,
-                              gpointer *private)
+policy_any_cancel_request(struct icd_policy_request *request,
+                          gpointer *private)
 {
   struct policy_any_data *data = (struct policy_any_data *)*private;
 
@@ -216,9 +217,9 @@ icd_policy_any_cancel_request(struct icd_policy_request *request,
     {
       if (l->data)
       {
-        ILOG_DEBUG("any connection stopping scan for %p, %p", scan_cb,
-                   l->data);
-        data->scan_stop(scan_cb, l->data);
+        ILOG_DEBUG("any connection stopping scan for %p, %p",
+                    policy_any_scan_cb, l->data);
+        data->scan_stop(policy_any_scan_cb, l->data);
         g_free(l->data);
       }
     }
@@ -249,15 +250,15 @@ icd_policy_any_cancel_request(struct icd_policy_request *request,
 }
 
 static void
-icd_policy_any_destruct(gpointer *private)
+policy_any_destruct(gpointer *private)
 {
-  icd_policy_any_cancel_request(NULL, private);
+  policy_any_cancel_request(NULL, private);
   g_free(*private);
   *private = NULL;
 }
 
 static gint
-get_max_priority(const GSList *existing_requests)
+policy_any_get_prio(const GSList *existing_requests)
 {
   GConfClient *gconf = gconf_client_get_default();
   gint rv = -1;
@@ -282,10 +283,10 @@ get_max_priority(const GSList *existing_requests)
 }
 
 static void
-icd_policy_any_new_request(struct icd_policy_request *new_request,
-                           const GSList *existing_requests,
-                           icd_policy_request_new_cb_fn policy_done_cb,
-                           gpointer policy_token, gpointer *private)
+policy_any_new_request(struct icd_policy_request *new_request,
+                       const GSList *existing_requests,
+                       icd_policy_request_new_cb_fn policy_done_cb,
+                       gpointer policy_token, gpointer *private)
 {
   struct policy_any_data *data = (struct policy_any_data *)*private;
   GSList *candidates;
@@ -480,7 +481,7 @@ skip:
   g_object_unref(gconf);
 
   data->scan_types_list = scan_types_list;
-  data->min_prio = get_max_priority(existing_requests);
+  data->min_prio = policy_any_get_prio(existing_requests);
 
   ILOG_DEBUG("any connection request %p scanning for networks with prio > %d",
              data->request->request_token, data->min_prio);
@@ -503,7 +504,8 @@ skip:
       scan_data->policy_done_cb = policy_done_cb;
       scan_data->policy_token = policy_token;
       data->ongoing_scans = g_slist_prepend(data->ongoing_scans, scan_data);
-      data->scan_start(type, ICD_NW_SEARCH_SCOPE_SAVED, scan_cb, scan_data);
+      data->scan_start(type, ICD_NW_SEARCH_SCOPE_SAVED,
+                       policy_any_scan_cb, scan_data);
       scan_started = TRUE;
     }
 
@@ -536,8 +538,8 @@ icd_policy_init(struct icd_policy_api *policy_api,
   data->scan_stop = scan_stop;
   data->srv_check = srv_check;
 
-  policy_api->new_request = icd_policy_any_new_request;
-  policy_api->cancel_request = icd_policy_any_cancel_request;
-  policy_api->destruct = icd_policy_any_destruct;
+  policy_api->new_request = policy_any_new_request;
+  policy_api->cancel_request = policy_any_cancel_request;
+  policy_api->destruct = policy_any_destruct;
   policy_api->private = data;
 }

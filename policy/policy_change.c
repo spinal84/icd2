@@ -13,46 +13,46 @@
 
 struct policy_change_data
 {
-  DBusPendingCall *pending;
-  gchar *network_id;
-  gchar *new_network_id;
-  gboolean processing;
-  icd_policy_request_new_cb_fn policy_done_cb;
+  DBusPendingCall *change_call;
+  gchar *change_from;
+  gchar *change_to;
+  gboolean is_changing;
+  icd_policy_request_new_cb_fn done_cb;
   struct icd_policy_request *new_request;
-  gpointer policy_token;
+  gpointer done_token;
 };
 
 static void
 cancel_pending_call(struct policy_change_data *data)
 {
-  if (data->pending)
+  if (data->change_call)
   {
-    dbus_pending_call_cancel(data->pending);
-    data->pending = NULL;
+    dbus_pending_call_cancel(data->change_call);
+    data->change_call = NULL;
   }
 
-  g_free(data->network_id);
-  data->network_id = NULL;
-  g_free(data->new_network_id);
-  data->new_network_id = NULL;
+  g_free(data->change_from);
+  data->change_from = NULL;
+  g_free(data->change_to);
+  data->change_to = NULL;
 }
 
 static void
 policy_done(enum icd_policy_status status, struct policy_change_data *data)
 {
-  icd_policy_request_new_cb_fn policy_done_cb = data->policy_done_cb;
+  icd_policy_request_new_cb_fn policy_done_cb = data->done_cb;
 
   cancel_pending_call(data);
 
   if (policy_done_cb)
-    policy_done_cb(status, data->new_request, data->policy_token);
+    policy_done_cb(status, data->new_request, data->done_token);
   else
     ILOG_WARN("policy change callback is missing so it is not called!");
 
-  data->processing = FALSE;
-  data->policy_done_cb = NULL;
+  data->is_changing = FALSE;
+  data->done_cb = NULL;
   data->new_request = NULL;
-  data->policy_token = NULL;
+  data->done_token = NULL;
 }
 
 static DBusHandlerResult
@@ -62,28 +62,28 @@ change_cb(DBusConnection *connection, DBusMessage *message, void *user_data)
   {
     struct policy_change_data *data = (struct policy_change_data *)user_data;
     dbus_bool_t accepted = FALSE;
-    gchar *new_network_id;
-    gchar *network_id;
+    gchar *change_to;
+    gchar *change_from;
 
     if (dbus_message_get_args(message, NULL,
-                              DBUS_TYPE_STRING, &network_id,
-                              DBUS_TYPE_STRING, &new_network_id,
+                              DBUS_TYPE_STRING, &change_from,
+                              DBUS_TYPE_STRING, &change_to,
                               DBUS_TYPE_BOOLEAN, &accepted,
                               DBUS_TYPE_INVALID))
     {
-      if (data->network_id && data->new_network_id &&
-          !strcmp(data->network_id, network_id) &&
-          !strcmp(data->new_network_id, new_network_id))
+      if (data->change_from && data->change_to &&
+          !strcmp(data->change_from, change_from) &&
+          !strcmp(data->change_to, change_to))
       {
         ILOG_DEBUG("policy change from '%s' to '%s' %saccepted",
-                   data->network_id, data->new_network_id,
+                   data->change_from, data->change_to,
                    accepted ? "" : "not ");
       }
       else
       {
         ILOG_ERR("policy change expected change from '%s' to '%s', got '%s' and '%s'",
-                 data->network_id, data->new_network_id, network_id,
-                 new_network_id);
+                 data->change_from, data->change_to, change_from,
+                 change_to);
       }
     }
     else
@@ -113,13 +113,13 @@ show_change_dlg_cb(DBusPendingCall *pending, void *user_data)
   struct policy_change_data *data = (struct policy_change_data *)user_data;
   DBusMessage *message = dbus_pending_call_steal_reply(pending);
 
-  dbus_pending_call_unref(data->pending);
-  data->pending = NULL;
+  dbus_pending_call_unref(data->change_call);
+  data->change_call = NULL;
 
   if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR)
   {
     ILOG_INFO("policy change confirmation dialog rejected change from '%s' to '%s'",
-              data->network_id, data->new_network_id);
+              data->change_from, data->change_to);
   }
   else
     ILOG_WARN("policy change dialog confirmed but actual dialog not implemented; bug in dialogs!");
@@ -151,29 +151,29 @@ icd_policy_change_new_request(struct icd_policy_request *new_request,
       return;
     }
 
-    if (data->processing)
+    if (data->is_changing)
     {
       ILOG_INFO("policy change still processing previous change");
       policy_done_cb(ICD_POLICY_REJECTED, new_request, policy_token);
       return;
     }
 
-    data->network_id = g_strdup(request->network_id);
-    data->policy_done_cb = policy_done_cb;
-    data->policy_token = policy_token;
+    data->change_from = g_strdup(request->network_id);
+    data->done_cb = policy_done_cb;
+    data->done_token = policy_token;
     data->new_request = new_request;
-    data->new_network_id = g_strdup(new_request->network_id);
+    data->change_to = g_strdup(new_request->network_id);
 
     ILOG_INFO("policy change connection requested from '%s' to maybe '%s'",
-              data->network_id, data->new_network_id);
+              data->change_from, data->change_to);
 
     policy_attrs = new_request->attrs;
 
     if (policy_attrs & (ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE_CHANGE |
                         ICD_POLICY_ATTRIBUTE_CONN_UI))
     {
-      ILOG_INFO("policy change from '%s' to maybe '%s'", data->network_id,
-                data->new_network_id);
+      ILOG_INFO("policy change from '%s' to maybe '%s'", data->change_from,
+                data->change_to);
       policy_done(ICD_POLICY_ACCEPTED, data);
     }
     else
@@ -195,20 +195,20 @@ icd_policy_change_new_request(struct icd_policy_request *new_request,
         if (message)
         {
           if (dbus_message_append_args(message,
-                                       DBUS_TYPE_STRING, &data->network_id,
-                                       DBUS_TYPE_STRING, &data->new_network_id,
+                                       DBUS_TYPE_STRING, &data->change_from,
+                                       DBUS_TYPE_STRING, &data->change_to,
                                        DBUS_TYPE_INVALID))
           {
-            data->pending = icd_dbus_send_system_mcall(
+            data->change_call = icd_dbus_send_system_mcall(
                 message, POLICY_CHANGE_CALL_TIMEOUT, show_change_dlg_cb, data);
-            data->processing = TRUE;
+            data->is_changing = TRUE;
           }
 
           dbus_message_unref(message);
         }
       }
 
-      if (!data->pending)
+      if (!data->change_call)
       {
         ILOG_ERR("policy change cannot be confirmed, rejecting req %p",
                  new_request);

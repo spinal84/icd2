@@ -20,7 +20,7 @@ struct policy_iap_ask_data
 };
 
 static gboolean
-string_equal(const char *a, const char *b)
+string_equal(const gchar *a, const gchar *b)
 {
   if (!a)
     return !b;
@@ -32,7 +32,7 @@ string_equal(const char *a, const char *b)
 }
 
 static void
-flight_mode_exit_cb(DBusPendingCall *pending, void *user_data)
+policy_iap_ask_flightmode_pending(DBusPendingCall *pending, void *user_data)
 {
   struct policy_iap_ask_data *data = (struct policy_iap_ask_data *)user_data;
   DBusMessage *reply = dbus_pending_call_steal_reply(pending);
@@ -57,7 +57,7 @@ flight_mode_exit_cb(DBusPendingCall *pending, void *user_data)
 }
 
 static void
-show_conn_dlg_cb(DBusPendingCall *pending, void *user_data)
+policy_iap_ask_pending(DBusPendingCall *pending, void *user_data)
 {
   struct policy_iap_ask_data *data = (struct policy_iap_ask_data *)user_data;;
   DBusMessage *reply;
@@ -94,7 +94,7 @@ show_conn_dlg_cb(DBusPendingCall *pending, void *user_data)
         {
           ILOG_DEBUG("policy iap asking to exit flight mode");
           data->pending_call = icd_dbus_send_system_mcall(message,
-              POLICY_IAP_ASK_TIMEOUT, flight_mode_exit_cb, data);
+              POLICY_IAP_ASK_TIMEOUT, policy_iap_ask_flightmode_pending, data);
           dbus_message_unref(message);
 
           if (data->pending_call)
@@ -132,10 +132,10 @@ show_conn_dlg_cb(DBusPendingCall *pending, void *user_data)
 }
 
 static void
-icd_policy_ask_request_new(struct icd_policy_request *new_request,
-                           const GSList *existing_requests,
-                           icd_policy_request_new_cb_fn policy_done_cb,
-                           gpointer policy_token, gpointer *private)
+policy_iap_ask_request(struct icd_policy_request *new_request,
+                       const GSList *existing_requests,
+                       icd_policy_request_new_cb_fn policy_done_cb,
+                       gpointer policy_token, gpointer *private)
 {
   if (!strcmp(OSSO_IAP_ASK, new_request->network_id))
   {
@@ -179,7 +179,7 @@ icd_policy_ask_request_new(struct icd_policy_request *new_request,
     ILOG_DEBUG("Requesting 'Select connection' dialog");
 
     data->pending_call = icd_dbus_send_system_mcall(
-        message, POLICY_IAP_ASK_TIMEOUT, show_conn_dlg_cb, data);
+        message, POLICY_IAP_ASK_TIMEOUT, policy_iap_ask_pending, data);
     dbus_message_unref(message);
 
     if (!data->pending_call)
@@ -199,18 +199,18 @@ reject:
 }
 
 static void
-icd_policy_ask_request_cancel(struct icd_policy_request *request,
+policy_iap_ask_cancel_request(struct icd_policy_request *request,
                               gpointer *private)
 {
   GSList *l;
 
   for (l = (GSList *)*private; l; l = l->next)
   {
-    struct policy_iap_ask_data *priv = (struct policy_iap_ask_data *)l->data;
+    struct policy_iap_ask_data *data = (struct policy_iap_ask_data *)l->data;
 
-    if (priv)
+    if (data)
     {
-      struct icd_policy_request *new_request = priv->request;
+      struct icd_policy_request *new_request = data->request;
 
       if ((request->network_attrs & ICD_NW_ATTR_LOCALMASK) ==
           (new_request->network_attrs & ICD_NW_ATTR_LOCALMASK) &&
@@ -221,9 +221,9 @@ icd_policy_ask_request_cancel(struct icd_policy_request *request,
                    request->network_type, request->network_attrs,
                    request->network_id);
 
-        *(priv->private) = g_slist_remove((GSList *)*(priv->private), priv);
-        dbus_pending_call_cancel(priv->pending_call);
-        g_free(priv);
+        *(data->private) = g_slist_remove((GSList *)*(data->private), data);
+        dbus_pending_call_cancel(data->pending_call);
+        g_free(data);
       }
     }
     else
@@ -242,6 +242,6 @@ icd_policy_init(struct icd_policy_api *policy_api,
                 icd_policy_network_priority_fn priority,
                 icd_policy_service_module_check_fn srv_check)
 {
-  policy_api->new_request = icd_policy_ask_request_new;
-  policy_api->cancel_request = icd_policy_ask_request_cancel;
+  policy_api->new_request = policy_iap_ask_request;
+  policy_api->cancel_request = policy_iap_ask_cancel_request;
 }

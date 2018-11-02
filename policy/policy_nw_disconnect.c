@@ -9,48 +9,89 @@
 #define POLICY_NW_DISCONNECT_USER_REFCOUNT_GCONF_PATH \
         ICD_GCONF_SETTINGS "/policy/policy_nw_disconnect/user_refcount"
 
+static gboolean
+policy_nw_disconnect_cancel_always_online()
+{
+  GError *error = NULL;
+  GConfClient *gconf = gconf_client_get_default();
+  GConfValue *val = gconf_client_get(
+      gconf, POLICY_NW_DISCONNECT_CANCELS_ALWAYS_ONLINE_GCONF_PATH, &error);
+  g_object_unref(gconf);
+
+  if (G_VALUE_HOLDS_BOOLEAN(val) && !error)
+  {
+    gboolean always_online = gconf_value_get_bool(val);
+    gconf_value_free(val);
+    return always_online;
+  }
+  else if (!error)
+    ILOG_DEBUG("policy nw disconnect cancel always online boolean is not set");
+  else
+  {
+    ILOG_DEBUG("policy nw disconnect cancel always online is not set, "
+               "error '%s'", error->message);
+    g_error_free(error);
+  }
+
+  if (val)
+    gconf_value_free(val);
+
+  return FALSE;
+}
+
+static void
+policy_nw_disconnect_unset_always_online(void)
+{
+  GConfClient *gconf = gconf_client_get_default();
+  ILOG_DEBUG("policy nw disconnect disabling always online search interval");
+  gconf_client_set_int(gconf, ICD_GCONF_NETWORK_SEARCH_INTERVAL, 0, NULL);
+  g_object_unref(gconf);
+}
+
+static gboolean
+policy_nw_disconnect_user_refcount(void)
+{
+  GError *error = NULL;
+  GConfClient *gconf = gconf_client_get_default();
+  GConfValue *val = gconf_client_get(
+      gconf, POLICY_NW_DISCONNECT_USER_REFCOUNT_GCONF_PATH, &error);
+  g_object_unref(gconf);
+
+  if (G_VALUE_HOLDS_BOOLEAN(val) && !error)
+  {
+    gboolean user_refcount = gconf_value_get_bool(val);
+    gconf_value_free(val);
+    return user_refcount;
+  }
+  else if (!error)
+    ILOG_DEBUG("policy nw disconnect refcounting boolean is not set");
+  else
+  {
+    ILOG_DEBUG("policy nw disconnect refcounting is not set, error '%s'",
+               error->message);
+    g_error_free(error);
+  }
+
+  if (val)
+    gconf_value_free(val);
+
+  return FALSE;
+}
+
 static enum icd_policy_status
 policy_nw_disconnect(struct icd_policy_request *network,
                      gint reference_count,
                      GSList *existing_connections,
-                     gpointer *privatx)
+                     gpointer *private)
 {
-  GConfClient *gconf;
-  GConfValue *val;
-
-  GError *error;
-
   if (!reference_count)
   {
-    error = NULL;
-    gconf = gconf_client_get_default();
-    val = gconf_client_get(gconf,
-                           POLICY_NW_DISCONNECT_USER_REFCOUNT_GCONF_PATH,
-                           &error);
-    g_object_unref(gconf);
-
-    if (G_VALUE_HOLDS_BOOLEAN(val) && !error)
+    if (policy_nw_disconnect_user_refcount())
     {
-      gboolean user_refcount = gconf_value_get_bool(val);
-      gconf_value_free(val);
-
-      if (user_refcount)
-      {
-        ILOG_INFO("policy nw disconnect reference counting turned on, disconnecting since no apps active");
-        return ICD_POLICY_ACCEPTED;
-      }
+      ILOG_INFO("policy nw disconnect reference counting turned on, "
+                "disconnecting since no apps active");
+      return ICD_POLICY_ACCEPTED;
     }
-    else if (!error)
-      ILOG_DEBUG("policy nw disconnect refcounting boolean is not set");
-    else
-    {
-      ILOG_DEBUG("policy nw disconnect refcounting is not set, error '%s'",
-                 error->message);
-      g_error_free(error);
-    }
-
-    if (val)
-      gconf_value_free(val);
   }
 
   if (reference_count >= 0)
@@ -63,34 +104,8 @@ policy_nw_disconnect(struct icd_policy_request *network,
   ILOG_INFO("policy nw disconnect reference count %d, disconnect from UI",
             reference_count);
 
-  error = NULL;
-  gconf = gconf_client_get_default();
-  val = gconf_client_get(gconf,
-                         POLICY_NW_DISCONNECT_CANCELS_ALWAYS_ONLINE_GCONF_PATH,
-                         &error);
-  g_object_unref(gconf);
-
-  if (G_VALUE_HOLDS_BOOLEAN(val) && !error)
-  {
-    if (gconf_value_get_bool(val))
-    {
-      gconf = gconf_client_get_default();
-      ILOG_DEBUG("policy nw disconnect disabling always online search interval");
-      gconf_client_set_int(gconf, ICD_GCONF_NETWORK_SEARCH_INTERVAL, 0, NULL);
-      g_object_unref(gconf);
-    }
-  }
-  else if (!error)
-    ILOG_DEBUG("policy nw disconnect cancel always online boolean is not set");
-  else
-  {
-    ILOG_DEBUG("policy nw disconnect cancel always online is not set, error '%s'",
-               error->message);
-    g_error_free(error);
-  }
-
-  if (val)
-    gconf_value_free(val);
+  if (policy_nw_disconnect_cancel_always_online())
+    policy_nw_disconnect_unset_always_online();
 
   return ICD_POLICY_ACCEPTED;
 }

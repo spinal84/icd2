@@ -1,10 +1,10 @@
 #include "policy_api.h"
 
 static void
-icd_policy_add_new_request(struct icd_policy_request *new_request,
-                           const GSList *existing_requests,
-                           icd_policy_request_new_cb_fn policy_done_cb,
-                           gpointer policy_token, gpointer *private)
+policy_add_request(struct icd_policy_request *new_request,
+                   const GSList *existing_requests,
+                   icd_policy_request_new_cb_fn policy_done_cb,
+                   gpointer policy_token, gpointer *private)
 {
   icd_policy_nw_add_fn add_network = *private;
 
@@ -34,5 +34,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
                 icd_policy_service_module_check_fn srv_check)
 {
   policy_api->private = add_network;
-  policy_api->new_request = icd_policy_add_new_request;
+  policy_api->new_request = policy_add_request;
 }

@@ -4,13 +4,16 @@
 #include "policy_api.h"
 #include "icd_log.h"
 
-#define ICD_POLICY_NW_DISCONNECT_GCONF ICD_GCONF_SETTINGS "/policy/policy_nw_disconnect/"
+#define POLICY_NW_DISCONNECT_CANCELS_ALWAYS_ONLINE_GCONF_PATH \
+        ICD_GCONF_SETTINGS "/policy/policy_nw_disconnect/cancel_always_online"
+#define POLICY_NW_DISCONNECT_USER_REFCOUNT_GCONF_PATH \
+        ICD_GCONF_SETTINGS "/policy/policy_nw_disconnect/user_refcount"
 
 static enum icd_policy_status
-icd_policy_nw_disconnect_disconnect(struct icd_policy_request *network,
-                                    gint reference_count,
-                                    GSList *existing_connections,
-                                    gpointer *privatx)
+policy_nw_disconnect(struct icd_policy_request *network,
+                     gint reference_count,
+                     GSList *existing_connections,
+                     gpointer *privatx)
 {
   GConfClient *gconf;
   GConfValue *val;
@@ -22,7 +25,7 @@ icd_policy_nw_disconnect_disconnect(struct icd_policy_request *network,
     error = NULL;
     gconf = gconf_client_get_default();
     val = gconf_client_get(gconf,
-                           ICD_POLICY_NW_DISCONNECT_GCONF "user_refcount",
+                           POLICY_NW_DISCONNECT_USER_REFCOUNT_GCONF_PATH,
                            &error);
     g_object_unref(gconf);
 
@@ -63,7 +66,7 @@ icd_policy_nw_disconnect_disconnect(struct icd_policy_request *network,
   error = NULL;
   gconf = gconf_client_get_default();
   val = gconf_client_get(gconf,
-                         ICD_POLICY_NW_DISCONNECT_GCONF "cancel_always_online",
+                         POLICY_NW_DISCONNECT_CANCELS_ALWAYS_ONLINE_GCONF_PATH,
                          &error);
   g_object_unref(gconf);
 
@@ -103,5 +106,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
                 icd_policy_network_priority_fn priority,
                 icd_policy_service_module_check_fn srv_check)
 {
-  policy_api->disconnect = icd_policy_nw_disconnect_disconnect;
+  policy_api->disconnect = policy_nw_disconnect;
 }

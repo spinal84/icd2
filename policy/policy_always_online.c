@@ -40,11 +40,11 @@ struct always_online_data
   gint highest_network_priority;
 };
 
-static void always_online_run(struct always_online_data *data,
-                              gboolean make_new_request);
+static void policy_always_online_run(struct always_online_data *data,
+                                     gboolean immediately);
 
-static int
-get_iap_count()
+static guint
+policy_always_online_count_iaps()
 {
   GConfClient *gconf = gconf_client_get_default();
   GSList *l;
@@ -69,11 +69,8 @@ get_iap_count()
 }
 
 static void
-cancel_always_online_timer(gpointer user_data)
+policy_always_online_cancel_timer(struct always_online_data *data)
 {
-  struct always_online_data *data =
-      (struct always_online_data *)user_data;
-
   if (data->timeout_id)
   {
     ILOG_INFO("always online timeout id %d cancelled",
@@ -84,20 +81,20 @@ cancel_always_online_timer(gpointer user_data)
 }
 
 static gboolean
-always_online_timer_cb(gpointer user_data)
+policy_always_online_make_request_cb(gpointer user_data)
 {
   struct always_online_data *data =
       (struct always_online_data *)user_data;
 
   ILOG_DEBUG("always online timer %d triggered", data->timeout_id);
-  always_online_run(data, TRUE);
+  policy_always_online_run(data, TRUE);
 
   return TRUE;
 }
 
 static void
-parse_device_mode_ind(DBusMessage *message,
-                      struct always_online_data *data)
+policy_always_online_flightmode(DBusMessage *message,
+                                struct always_online_data *data)
 {
   gboolean flight_mode;
   gchar *mode;
@@ -113,7 +110,7 @@ parse_device_mode_ind(DBusMessage *message,
       if (!data->flight_mode)
       {
         ILOG_INFO("always online: offline mode");
-        cancel_always_online_timer(data);
+        policy_always_online_cancel_timer(data);
       }
     }
     else
@@ -123,11 +120,12 @@ parse_device_mode_ind(DBusMessage *message,
       if (data->flight_mode)
       {
         ILOG_INFO("always online: normal mode");
-        cancel_always_online_timer(data);
+        policy_always_online_cancel_timer(data);
         data->timeout_id =
-            g_timeout_add(2000, always_online_timer_cb, data);
+            g_timeout_add(2000, policy_always_online_make_request_cb, data);
 
-        ILOG_INFO("always online waiting 2s for the normal mode to propagate through the rest of the system, timer id is %d",
+        ILOG_INFO("always online waiting 2s for the normal mode to propagate "
+                  "through the rest of the system, timer id is %d",
                   data->timeout_id);
       }
     }
@@ -145,20 +143,21 @@ parse_device_mode_ind(DBusMessage *message,
 }
 
 static DBusHandlerResult
-device_mode_ind_filter(DBusConnection *connection, DBusMessage *message,
-                       void *user_data)
+policy_always_online_flightmode_sig(DBusConnection *connection,
+                                    DBusMessage *message,
+                                    void *user_data)
 {
   if (dbus_message_is_signal(message, MCE_SIGNAL_IF, MCE_DEVICE_MODE_SIG))
   {
-    parse_device_mode_ind(message,
-                          (struct always_online_data *)user_data);
+    policy_always_online_flightmode(message,
+                                    (struct always_online_data *)user_data);
   }
 
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
 static void
-get_device_mode_cb(DBusPendingCall *pending, void *user_data)
+policy_always_online_flightmode_cb(DBusPendingCall *pending, void *user_data)
 {
   struct always_online_data *data =
       (struct always_online_data *)user_data;
@@ -166,20 +165,20 @@ get_device_mode_cb(DBusPendingCall *pending, void *user_data)
 
   dbus_pending_call_unref(data->pending_flightmode);
   data->pending_flightmode = NULL;
-  parse_device_mode_ind(message, data);
+  policy_always_online_flightmode(message, data);
   dbus_message_unref(message);
 }
 
 static void
-always_online_run(struct always_online_data *data,
-                  gboolean make_new_request)
+policy_always_online_run(struct always_online_data *data,
+                         gboolean immediately)
 {
   gboolean module_loaded;
 
   data->always_online_value_changed = FALSE;
 
   if (data->timeout_id)
-    cancel_always_online_timer(data);
+    policy_always_online_cancel_timer(data);
 
   module_loaded = data->srv_check(NULL);
 
@@ -188,13 +187,13 @@ always_online_run(struct always_online_data *data,
       (data->connection_count && !data->always_change) ||
       data->highest_network_priority )
   {
-    ILOG_DEBUG("always online not run because iap count %d <= 0; "
+    ILOG_DEBUG("always online doesn't run because iap count %d <= 0; "
                "srv_provider %s; auto_conn is '%s'; timeout %d <= 0; number of "
                "connections %d > 0 and always change %s; priority %d",
                data->iap_count, module_loaded ? "TRUE" : "FALSE",
-               data->auto_conn? "TRUE" : "FALSE", data->timeout,
-               data->connection_count,
-               data->always_change ? "TRUE" : "FALSE", data->highest_network_priority);
+               data->auto_conn ? "TRUE" : "FALSE", data->timeout,
+               data->connection_count, data->always_change ? "TRUE" : "FALSE",
+               data->highest_network_priority);
 
     return;
   }
@@ -204,10 +203,10 @@ always_online_run(struct always_online_data *data,
              "always change %s; priority %d", data->iap_count,
              module_loaded ? "TRUE" : "FALSE",
              data->auto_conn? "TRUE" : "FALSE", data->timeout,
-             data->connection_count,
-             data->always_change ? "TRUE" : "FALSE", data->highest_network_priority);
+             data->connection_count, data->always_change ? "TRUE" : "FALSE",
+             data->highest_network_priority);
 
-  if (make_new_request)
+  if (immediately)
   {
     guint policy_attrs = ICD_POLICY_ATTRIBUTE_NO_INTERACTION |
                          ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE;
@@ -220,18 +219,18 @@ always_online_run(struct always_online_data *data,
     data->make_request(policy_attrs, NULL, 0, NULL, NULL, 0, OSSO_IAP_ANY);
   }
 
-  data->timeout_id =
-      g_timeout_add(1000 * data->timeout, always_online_timer_cb, data);
+  data->timeout_id = g_timeout_add(1000 * data->timeout,
+                                   policy_always_online_make_request_cb, data);
 
   ILOG_INFO("always online timer id %d added", data->timeout_id);
 }
 
 static gboolean
-check_connections_cb(gpointer user_data)
+policy_always_online_check(gpointer user_data)
 {
   struct always_online_data *data =
       (struct always_online_data *)user_data;
-  int iap_count = get_iap_count();
+  int iap_count = policy_always_online_count_iaps();
 
   ILOG_DEBUG("always online found %d IAPs in gconf", iap_count);
 
@@ -240,7 +239,8 @@ check_connections_cb(gpointer user_data)
   if (!data->iap_count && iap_count)
   {
     data->iap_count = iap_count;
-    ILOG_INFO("always online found one newly created IAP in gconf, trying to activate");
+    ILOG_INFO("always online found one newly created IAP in gconf, "
+              "trying to activate");
   }
   else
   {
@@ -252,14 +252,16 @@ check_connections_cb(gpointer user_data)
     ILOG_INFO("always online values changed, trying to activate");
   }
 
-  always_online_run(data, TRUE);
+  policy_always_online_run(data, TRUE);
 
   return FALSE;
 }
 
 static void
-network_type_notify_cb(GConfClient *client, guint cnxn_id, GConfEntry *entry,
-                       gpointer user_data)
+policy_always_online_nw_params_changed(GConfClient *client,
+                                       guint cnxn_id,
+                                       GConfEntry *entry,
+                                       gpointer user_data)
 {
   struct always_online_data *data =
       (struct always_online_data *)user_data;
@@ -309,13 +311,15 @@ network_type_notify_cb(GConfClient *client, guint cnxn_id, GConfEntry *entry,
   if (!data->count_iaps_id)
   {
     data->count_iaps_id = g_timeout_add(POLICY_ALWAYS_ONLINE_IAP_TIMEOUT,
-                                        check_connections_cb, data);
+                                        policy_always_online_check, data);
   }
 }
 
 static void
-iap_notify_cb(GConfClient *client, guint cnxn_id, GConfEntry *entry,
-              gpointer user_data)
+policy_always_online_connections_changed(GConfClient *client,
+                                         guint cnxn_id,
+                                         GConfEntry *entry,
+                                         gpointer user_data)
 {
   struct always_online_data *data =
       (struct always_online_data *)user_data;
@@ -325,12 +329,12 @@ iap_notify_cb(GConfClient *client, guint cnxn_id, GConfEntry *entry,
     ILOG_DEBUG("always online will soon check whether connections were added");
 
     data->count_iaps_id = g_timeout_add(POLICY_ALWAYS_ONLINE_IAP_TIMEOUT,
-                                        check_connections_cb, data);
+                                        policy_always_online_check, data);
   }
 }
 
 static void
-icd_policy_always_online_destruct(gpointer *private)
+policy_always_online_destruct(gpointer *private)
 {
   struct always_online_data *data =
       (struct always_online_data *)*private;
@@ -345,9 +349,9 @@ icd_policy_always_online_destruct(gpointer *private)
 
   if (data->flightmode_signals)
   {
-    icd_dbus_disconnect_system_bcast_signal(MCE_SIGNAL_IF,
-                                            device_mode_ind_filter, data,
-                                            POLICY_ALWAYS_ONLINE_MCE_FILTER);
+    icd_dbus_disconnect_system_bcast_signal(
+        MCE_SIGNAL_IF, policy_always_online_flightmode_sig, data,
+        POLICY_ALWAYS_ONLINE_MCE_FILTER);
   }
 
   if (data->notify_nw_params)
@@ -363,7 +367,7 @@ icd_policy_always_online_destruct(gpointer *private)
   }
 
   g_object_unref(gconf);
-  cancel_always_online_timer(data);
+  policy_always_online_cancel_timer(data);
 
   if (data->count_iaps_id)
   {
@@ -378,10 +382,10 @@ icd_policy_always_online_destruct(gpointer *private)
 }
 
 static void
-icd_policy_always_online_disconnected(struct icd_policy_request *network,
-                                      const gchar *err_str,
-                                      GSList *existing_connections,
-                                      gpointer *private)
+policy_always_online_disconnected(struct icd_policy_request *network,
+                                  const gchar *err_str,
+                                  GSList *existing_connections,
+                                  gpointer *private)
 {
   struct always_online_data *data =
       (struct always_online_data *)*private;
@@ -396,19 +400,19 @@ icd_policy_always_online_disconnected(struct icd_policy_request *network,
     if (!data->connection_count)
       data->highest_network_priority = 0;
 
-    always_online_run(data, err_str ? TRUE : FALSE);
+    policy_always_online_run(data, err_str ? TRUE : FALSE);
   }
   else
     ILOG_DEBUG("always online sees network disconnected, but none connected");
 }
 
 static void
-icd_policy_always_online_connected(struct icd_policy_request *network,
-                                   GSList *existing_connections,
-                                   gpointer *privat)
+policy_always_online_connected(struct icd_policy_request *network,
+                               GSList *existing_connections,
+                               gpointer *private)
 {
   struct always_online_data *data =
-      (struct always_online_data *)*privat;
+      (struct always_online_data *)*private;
   gint highest_network_priority;
 
   data->connection_count = g_slist_length(existing_connections);
@@ -418,22 +422,23 @@ icd_policy_always_online_connected(struct icd_policy_request *network,
   if (data->always_change && data->priority)
   {
     if (data->priority(network->service_type, network->service_id,
-                          network->network_type, network->network_attrs,
-                          &highest_network_priority))
+                       network->network_type, network->network_attrs,
+                       &highest_network_priority) )
     {
-      ILOG_DEBUG("always online timer not cancelled because higher priority network exists and always_change is set (%s/0x%04x/%s/%d)",
+      ILOG_DEBUG("always online timer not cancelled because higher priority "
+                 "network exists and always_change is set (%s/0x%04x/%s/%d)",
                  network->network_type, network->network_attrs,
                  network->network_id, highest_network_priority);
       data->highest_network_priority = 0;
     }
     else
     {
-      cancel_always_online_timer(data);
+      policy_always_online_cancel_timer(data);
       data->highest_network_priority = highest_network_priority;
     }
   }
   else
-    cancel_always_online_timer(data);
+    policy_always_online_cancel_timer(data);
 }
 
 void
@@ -478,14 +483,14 @@ icd_policy_init(struct icd_policy_api *policy_api,
   ILOG_INFO("always online timeout defaults to %d minute(s)",
             data->timeout);
 
-  data->iap_count = get_iap_count();
+  data->iap_count = policy_always_online_count_iaps();
 
   ILOG_INFO("always online defaults to %d IAPs in gconf", data->iap_count);
 
   g_object_unref(gconf);
 
   data->flightmode_signals = icd_dbus_connect_system_bcast_signal(
-        MCE_SIGNAL_IF, device_mode_ind_filter, data,
+        MCE_SIGNAL_IF, policy_always_online_flightmode_sig, data,
         POLICY_ALWAYS_ONLINE_MCE_FILTER);
 
   if (!data->flightmode_signals)
@@ -503,7 +508,7 @@ icd_policy_init(struct icd_policy_api *policy_api,
 
   data->pending_flightmode = icd_dbus_send_system_mcall(
         message, POLICY_ALWAYS_ONLINE_MCE_TIMEOUT,
-        get_device_mode_cb, data);
+        policy_always_online_flightmode_cb, data);
 
   if (!data->pending_flightmode)
   {
@@ -514,8 +519,8 @@ icd_policy_init(struct icd_policy_api *policy_api,
 
   gconf = gconf_client_get_default();
   data->notify_nw_params = gconf_client_notify_add(
-        gconf, ICD_GCONF_NETWORK_MAPPING, network_type_notify_cb, data, NULL,
-        &error);
+      gconf, ICD_GCONF_NETWORK_MAPPING, policy_always_online_nw_params_changed,
+      data, NULL, &error);
 
   if (!error)
   {
@@ -524,9 +529,9 @@ icd_policy_init(struct icd_policy_api *policy_api,
 
     if (!error)
     {
-      data->notify_connections = gconf_client_notify_add(gconf, ICD_GCONF_PATH,
-                                                 iap_notify_cb, data, NULL,
-                                                 &error);
+      data->notify_connections = gconf_client_notify_add(
+            gconf, ICD_GCONF_PATH, policy_always_online_connections_changed,
+            data, NULL, &error);
 
       if (!error)
       {
@@ -538,9 +543,9 @@ icd_policy_init(struct icd_policy_api *policy_api,
           g_object_unref(gconf);
           data->priority = priority;
           data->srv_check = srv_check;
-          policy_api->connected = icd_policy_always_online_connected;
-          policy_api->disconnected = icd_policy_always_online_disconnected;
-          policy_api->destruct = icd_policy_always_online_destruct;
+          policy_api->connected = policy_always_online_connected;
+          policy_api->disconnected = policy_always_online_disconnected;
+          policy_api->destruct = policy_always_online_destruct;
           policy_api->priority = priority;
           return;
         }
@@ -559,5 +564,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
 
 failed:
   ILOG_CRIT("always online failed to connect, always online disabled");
-  icd_policy_always_online_destruct((gpointer *)&data);
+  policy_always_online_destruct((gpointer *)&data);
 }

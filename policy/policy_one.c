@@ -2,8 +2,8 @@
 #include "icd_log.h"
 
 static void
-icd_policy_one_connected(struct icd_policy_request *network,
-                         GSList *existing_connections, gpointer *private)
+policy_one_connected(struct icd_policy_request *network,
+                     GSList *existing_connections, gpointer *private)
 {
   icd_policy_nw_close_fn nw_close = (icd_policy_nw_close_fn)*private;
   GSList *l;
@@ -36,5 +36,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
                 icd_policy_service_module_check_fn srv_check)
 {
   policy_api->private = nw_close;
-  policy_api->connected = icd_policy_one_connected;
+  policy_api->connected = policy_one_connected;
 }

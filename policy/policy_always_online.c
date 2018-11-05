@@ -149,8 +149,7 @@ policy_always_online_flightmode(DBusMessage *message,
         data->timeout_id =
             g_timeout_add(2000, policy_always_online_make_request_cb, data);
 
-        ILOG_INFO("always online waiting 2s for the normal mode to propagate "
-                  "through the rest of the system, timer id is %d",
+        ILOG_INFO("always online waiting 2s for the normal mode to propagate through the rest of the system, timer id is %d",
                   data->timeout_id);
       }
     }
@@ -435,8 +434,7 @@ policy_always_online_connected(struct icd_policy_request *network,
                        network->network_type, network->network_attrs,
                        &highest_network_priority) )
     {
-      ILOG_DEBUG("always online timer not cancelled because higher priority "
-                 "network exists and always_change is set (%s/0x%04x/%s/%d)",
+      ILOG_DEBUG("always online timer not cancelled because higher priority network exists and always_change is set (%s/0x%04x/%s/%d)",
                  network->network_type, network->network_attrs,
                  network->network_id, highest_network_priority);
       data->highest_network_priority = 0;
@@ -557,8 +555,7 @@ icd_policy_init(struct icd_policy_api *policy_api,
   ILOG_INFO("always online connection change: %s",
             data->always_change ? "Yes" : "No");
 
-  data->timeout = gconf_client_get_int(gconf, SEARCH_INTERVAL_KEY,
-                                               NULL);
+  data->timeout = gconf_client_get_int(gconf, SEARCH_INTERVAL_KEY, NULL);
 
   ILOG_INFO("always online timeout defaults to %d minute(s)",
             data->timeout);
@@ -579,7 +576,7 @@ icd_policy_init(struct icd_policy_api *policy_api,
   {
     ILOG_CRIT("always online failed to connect, always online disabled");
     policy_always_online_destruct((gpointer *)&data);
-        return;
+    return;
   }
 
   data->priority = priority;

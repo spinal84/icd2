@@ -30,8 +30,7 @@ policy_merge_request(struct icd_policy_request *new_request,
   if (new_request->attrs & ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE_CHANGE &&
       policy_merge_string_equal(new_request->network_id, OSSO_IAP_ANY))
   {
-    ILOG_DEBUG("policy merge allows OSSO_IAP_ANY since changing "
-               "while connected is allowed");
+    ILOG_DEBUG("policy merge allows OSSO_IAP_ANY since changing while connected is allowed");
     policy_done_cb(ICD_POLICY_ACCEPTED, new_request, policy_token);
     return;
   }
@@ -73,8 +72,8 @@ policy_merge_request(struct icd_policy_request *new_request,
   {
     if (new_request->attrs & ICD_POLICY_ATTRIBUTE_BACKGROUND)
     {
-      ILOG_INFO("policy merge got req %p with attribute "
-                "ICD_POLICY_ATTRIBUTE_BACKGROUND, rejecting it", new_request);
+      ILOG_INFO("policy merge got req %p with attribute ICD_POLICY_ATTRIBUTE_BACKGROUND, rejecting it",
+                new_request);
       policy_done_cb(ICD_POLICY_REJECTED, new_request, policy_token);
     }
     else

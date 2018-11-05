@@ -178,8 +178,8 @@ policy_change_new_request(struct icd_policy_request *new_request,
 
     if (new_request->attrs & ICD_POLICY_ATTRIBUTE_BACKGROUND)
     {
-      ILOG_INFO("policy change not accepted for req %p "
-                "with ICD_POLICY_ATTRIBUTE_BACKGROUND", new_request);
+      ILOG_INFO("policy change not accepted for req %p with ICD_POLICY_ATTRIBUTE_BACKGROUND",
+                new_request);
       policy_done_cb(ICD_POLICY_REJECTED, new_request, policy_token);
       return;
     }
@@ -213,8 +213,7 @@ policy_change_new_request(struct icd_policy_request *new_request,
     {
       if (policy_attrs & ICD_POLICY_ATTRIBUTE_NO_INTERACTION)
       {
-        ILOG_INFO("policy change cannot ask for dialog "
-                  "since ICD_POLICY_ATTRIBUTE_NO_INTERACTION set");
+        ILOG_INFO("policy change cannot ask for dialog since ICD_POLICY_ATTRIBUTE_NO_INTERACTION set");
         policy_change_do_cb(ICD_POLICY_REJECTED, data);
         return;
       }

@@ -39,6 +39,7 @@ struct icd_policy_scan_data {
 };
 
 struct icd_policy_api_async_data;
+
 /**
  * @brief Function prototype for calling the actual asynchronous policy function
  *
@@ -298,8 +299,8 @@ icd_policy_api_existing_requests_get(struct icd_request *new_request)
 }
 
 static gboolean
-icd_policy_api_run_async(struct icd_policy_request *req,
-                         struct icd_policy_api_async_data *async_data)
+icd_policy_api_run_async_next(struct icd_policy_request *req,
+                              struct icd_policy_api_async_data *async_data)
 {
   if (!async_data->module_list)
     return FALSE;
@@ -352,7 +353,7 @@ icd_policy_api_request_cb(enum icd_policy_status status,
     request_data->existing_requests = icd_policy_api_existing_requests_get(
           (struct icd_request *)req->request_token);
 
-    if (!icd_policy_api_run_async(req, async_data))
+    if (!icd_policy_api_run_async_next(req, async_data))
     {
       ILOG_INFO("all new request policies done");
 
@@ -385,15 +386,36 @@ icd_policy_api_request_call(struct icd_policy_module *module,
   return FALSE;
 }
 
-void
-icd_policy_api_new_request(struct icd_policy_request *req,
-                           icd_policy_api_request_cb_fn cb, gpointer user_data)
+static gboolean
+icd_policy_api_run_async(struct icd_policy_request *req,
+                         icd_policy_api_async_call_fn call_policy,
+                         gpointer  user_data)
 {
-  struct icd_policy_api_request_data *request_data =
-      g_new0(struct icd_policy_api_request_data, 1);
   struct icd_policy_api_async_data *async_data =
       g_new0(struct icd_policy_api_async_data, 1);
   struct icd_context *icd_ctx = icd_context_get();
+
+  async_data->call_policy = call_policy;
+  async_data->user_data = user_data;
+  async_data->module_list = icd_ctx->policy_module_list;
+
+  if (icd_policy_api_run_async_next(req, async_data))
+    return TRUE;
+
+  ILOG_DEBUG("no policy modules can be run");
+  g_free(async_data);
+
+  return FALSE;
+}
+
+void
+icd_policy_api_new_request(struct icd_policy_request *req,
+                           icd_policy_api_request_cb_fn cb,
+                           gpointer user_data)
+{
+  gboolean async_success;
+  struct icd_policy_api_request_data *request_data =
+             g_new0(struct icd_policy_api_request_data, 1);
 
   request_data->cb = cb;
   request_data->user_data = user_data;
@@ -401,19 +423,14 @@ icd_policy_api_new_request(struct icd_policy_request *req,
       icd_policy_api_existing_requests_get
       ((struct icd_request *)req->request_token);
 
-  async_data->call_policy = icd_policy_api_request_call;
-  async_data->user_data = request_data;
-  async_data->module_list = icd_ctx->policy_module_list;
+  async_success = icd_policy_api_run_async(req,
+                      icd_policy_api_request_call, request_data);
 
-  if (!icd_policy_api_run_async(req, async_data))
+  if (!async_success)
   {
-    ILOG_DEBUG("no policy modules can be run");
-
-    g_free(async_data);
-
     ILOG_INFO("no module had a new_request policy");
 
-    request_data->cb(0, req);
+    request_data->cb(ICD_POLICY_ACCEPTED, req);
     g_slist_free(request_data->existing_requests);
     g_free(request_data);
   }

@@ -1226,6 +1226,40 @@ icd_dbus_api_deinit(void)
   icd_dbus_unregister_system_service(ICD_DBUS_API_PATH, ICD_DBUS_API_INTERFACE);
 }
 
+static DBusObjectPathMessageFunction
+icd_dbus_api_find_handler(DBusMessage *message,
+                          const struct icd_dbus_mcall_table *table)
+{
+  int i = 0;
+  const char *iface = dbus_message_get_interface(message);
+
+  if (iface && !strcmp(iface, ICD_DBUS_API_INTERFACE))
+  {
+    while (table[i].name)
+    {
+      if (!strcmp(dbus_message_get_member(message), table[i].name))
+      {
+        if (table[i].mcall_sig &&
+            dbus_message_has_signature(message, table[i].mcall_sig))
+        {
+          if (table[i].handler_fn)
+          {
+            ILOG_INFO("Received %s.%s (%s) request", iface,
+                      dbus_message_get_member(message),
+                      dbus_message_get_signature(message));
+
+            return table[i].handler_fn;
+          }
+        }
+      }
+
+      i++;
+    }
+  }
+
+  return NULL;
+}
+
 /**
  * @brief Receive registered method calls and find a handler for them
  *
@@ -1239,36 +1273,12 @@ icd_dbus_api_request(DBusConnection *connection, DBusMessage *message,
                      void *user_data)
 {
   DBusMessage *err_msg;
-  int i = 0;
-  const char *iface = dbus_message_get_interface(message);
+  DBusObjectPathMessageFunction handler_fn;
 
-  if (iface && !strcmp(iface, ICD_DBUS_API_INTERFACE))
-  {
-    while (icd_dbus_api_mcalls[i].name)
-    {
-      if (!strcmp(dbus_message_get_member(message),
-                  icd_dbus_api_mcalls[i].name))
-      {
-        if (icd_dbus_api_mcalls[i].mcall_sig &&
-            dbus_message_has_signature(message,
-                                       icd_dbus_api_mcalls[i].mcall_sig))
-        {
-          if (icd_dbus_api_mcalls[i].handler_fn)
-          {
-            ILOG_INFO("Received %s.%s (%s) request",
-                      dbus_message_get_interface(message),
-                      dbus_message_get_member(message),
-                      dbus_message_get_signature(message));
+  handler_fn = icd_dbus_api_find_handler(message, icd_dbus_api_mcalls);
 
-            return icd_dbus_api_mcalls[i].handler_fn(connection, message,
-                                                     user_data);
-          }
-        }
-      }
-
-      i++;
-    }
-  }
+  if (handler_fn)
+    return handler_fn(connection, message, user_data);
 
   ILOG_INFO("received '%s.%s' request has no handler implemented",
             dbus_message_get_interface(message),

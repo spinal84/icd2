@@ -1401,22 +1401,9 @@ icd_dbus_api_update_state(struct icd_iap *iap, const gchar *destination,
   return TRUE;
 }
 
-/**
- * @brief Function for sending state data to listeners
- *
- * @param iap the IAP
- * @param foreach_data foreach data structure
- *
- * @return TRUE on successful signal sending, FALSE on error
- *
- */
-static gboolean
-icd_dbus_api_state_send(struct icd_iap *iap,
-                        struct icd_dbus_api_foreach_data *foreach_data)
+static enum icd_connection_state
+icd_dbus_api_state_get(struct icd_iap *iap)
 {
-  const gchar *dest = foreach_data->sender;
-  gboolean rv;
-
   switch (iap->state)
   {
     case ICD_IAP_STATE_SCRIPT_PRE_UP:
@@ -1425,37 +1412,43 @@ icd_dbus_api_state_send(struct icd_iap *iap,
     case ICD_IAP_STATE_IP_UP:
     case ICD_IAP_STATE_SCRIPT_POST_UP:
     case ICD_IAP_STATE_SAVING:
-      rv = icd_dbus_api_update_state(iap, dest, ICD_STATE_CONNECTING);
-      break;
+      return ICD_STATE_CONNECTING;
     case ICD_IAP_STATE_SRV_UP:
     {
-      enum icd_connection_state conn_state;
-
       if (iap->limited_conn)
-        conn_state = ICD_STATE_LIMITED_CONN_ENABLED;
+        return ICD_STATE_LIMITED_CONN_ENABLED;
       else
-        conn_state = ICD_STATE_CONNECTING;
-
-      rv = icd_dbus_api_update_state(iap, dest, conn_state);
-      break;
+        return ICD_STATE_CONNECTING;
     }
     case ICD_IAP_STATE_CONNECTED:
-      rv = icd_dbus_api_update_state(iap, dest, ICD_STATE_CONNECTED);
-      break;
+      return ICD_STATE_CONNECTED;
     case ICD_IAP_STATE_CONNECTED_DOWN:
     case ICD_IAP_STATE_SRV_DOWN:
     case ICD_IAP_STATE_IP_DOWN:
     case ICD_IAP_STATE_LINK_PRE_DOWN:
     case ICD_IAP_STATE_LINK_DOWN:
     case ICD_IAP_STATE_SCRIPT_POST_DOWN:
-      rv = icd_dbus_api_update_state(iap, dest, ICD_STATE_DISCONNECTING);
-      break;
+      return ICD_STATE_DISCONNECTING;
     default:
-      rv = icd_dbus_api_update_state(iap, dest, ICD_STATE_DISCONNECTED);
-      break;
+      return ICD_STATE_DISCONNECTED;
   }
+}
 
-  return rv;
+/**
+ * @brief Function for sending state data to listeners
+ *
+ * @param iap the IAP
+ * @param foreach_data foreach data structure
+ *
+ * @return TRUE on successful signal sending, FALSE on error
+ */
+static gboolean
+icd_dbus_api_state_send(struct icd_iap *iap,
+                        struct icd_dbus_api_foreach_data *foreach_data)
+{
+  const gchar *dest = foreach_data->sender;
+
+  return icd_dbus_api_update_state(iap, dest, icd_dbus_api_state_get(iap));
 }
 
 /**

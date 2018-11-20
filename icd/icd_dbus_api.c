@@ -1451,6 +1451,48 @@ icd_dbus_api_state_send(struct icd_iap *iap,
   return icd_dbus_api_update_state(iap, dest, icd_dbus_api_state_get(iap));
 }
 
+static gboolean
+icd_dbus_api_state_scan_send(const gchar *network_type,
+                             struct icd_dbus_api_foreach_data *foreach_data)
+{
+  gboolean sent = FALSE;
+  const enum icd_connection_state state = ICD_STATE_SEARCH_START;
+
+  if (network_type)
+  {
+    DBusMessage *msg = dbus_message_new_signal(ICD_DBUS_API_PATH,
+                                               ICD_DBUS_API_INTERFACE,
+                                               ICD_DBUS_API_STATE_SIG);
+
+    if (msg && dbus_message_set_destination(msg, foreach_data->sender))
+    {
+      if (dbus_message_append_args(msg,
+                                   DBUS_TYPE_STRING, &network_type,
+                                   DBUS_TYPE_UINT32, &state,
+                                   DBUS_TYPE_INVALID))
+      {
+        sent = icd_dbus_send_system_msg(msg);
+
+        if (sent)
+          foreach_data->connections++;
+      }
+      else
+        ILOG_ERR("dbus api could not add attributes to scan state signal");
+    }
+    else
+    {
+      ILOG_ERR("dbus api could not create scan state signal");
+
+      if (!msg)
+        return FALSE;
+    }
+
+    dbus_message_unref(msg);
+  }
+
+  return sent;
+}
+
 /**
  * @brief Network module callback function for scanning status
  *
@@ -1464,10 +1506,9 @@ static gboolean
 icd_dbus_api_state_scanning(struct icd_network_module *module,
                             gpointer user_data)
 {
-  struct icd_dbus_api_foreach_data *data =
+  struct icd_dbus_api_foreach_data *foreach_data =
       (struct icd_dbus_api_foreach_data *)user_data;
   GSList *l;
-  const enum icd_connection_state state = ICD_STATE_SEARCH_START;
 
   if (!module->scan_progress)
     return TRUE;
@@ -1475,39 +1516,7 @@ icd_dbus_api_state_scanning(struct icd_network_module *module,
   for ( l = module->network_types; l; l = l->next )
   {
     const gchar *network_type = (const gchar *)l->data;
-
-    if (network_type)
-    {
-        gboolean sent;
-        DBusMessage *msg = dbus_message_new_signal(ICD_DBUS_API_PATH,
-                                                   ICD_DBUS_API_INTERFACE,
-                                                   ICD_DBUS_API_STATE_SIG);
-
-      if (msg && dbus_message_set_destination(msg, data->sender))
-      {
-        if (dbus_message_append_args(msg,
-                                     DBUS_TYPE_STRING, &network_type,
-                                     DBUS_TYPE_UINT32, &state,
-                                     DBUS_TYPE_INVALID))
-        {
-          sent = icd_dbus_send_system_msg(msg);
-
-          if (sent)
-            data->connections++;
-        }
-        else
-          ILOG_ERR("dbus api could not add attributes to scsn state signal");
-      }
-      else
-      {
-        ILOG_ERR("dbus api could not create scan state signal");
-
-        if (!msg)
-          continue;
-      }
-
-      dbus_message_unref(msg);
-    }
+    icd_dbus_api_state_scan_send(network_type, foreach_data);
   }
 
   return TRUE;

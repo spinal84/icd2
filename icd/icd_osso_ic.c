@@ -875,6 +875,18 @@ icd_osso_ic_connstats_link_cb(gpointer link_stats_cb_token,
   }
 }
 
+static void
+icd_osso_ic_connstats_link_get(struct icd_iap *iap,
+                               DBusMessage *method_call)
+{
+  struct icd_osso_ic_stats_data *stats_data =
+             g_new0(struct icd_osso_ic_stats_data, 1);
+
+  dbus_message_ref(method_call);
+  stats_data->request = method_call;
+  icd_iap_get_link_stats(iap, icd_osso_ic_connstats_link_cb, stats_data);
+}
+
 static DBusMessage *
 icd_osso_ic_connstats(DBusMessage *method_call, void *user_data)
 {
@@ -902,14 +914,7 @@ icd_osso_ic_connstats(DBusMessage *method_call, void *user_data)
   }
 
   if (iap)
-  {
-    struct icd_osso_ic_stats_data *stats_data =
-        g_new0(struct icd_osso_ic_stats_data, 1);
-
-    dbus_message_ref(method_call);
-    stats_data->request = method_call;
-    icd_iap_get_link_stats(iap, icd_osso_ic_connstats_link_cb, stats_data);
-  }
+    icd_osso_ic_connstats_link_get(iap, method_call);
   else
   {
     ILOG_INFO("no connection statistics available");

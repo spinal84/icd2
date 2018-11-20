@@ -920,11 +920,28 @@ icd_dbus_api_scan_all_types(struct icd_network_module *module,
   return TRUE;
 }
 
+static gboolean
+icd_dbus_api_scan_sender_exists(GSList *sender_list, const gchar *sender)
+{
+  if (sender)
+  {
+    while (sender_list)
+    {
+      if (!strcmp((const char *)sender_list->data, sender))
+        return TRUE;
+      sender_list = sender_list->next;
+    }
+  }
+  else
+    ILOG_WARN("icd dbus sender list has NULL item");
+
+  return FALSE;
+}
+
 static DBusHandlerResult
 icd_dbus_api_scan_req(DBusConnection *conn, DBusMessage *msg, void *user_data)
 {
   const char *sender;
-  GSList *l;
   DBusMessage *reply;
   gchar *dbus_dest;
   struct icd_context *icd_ctx;
@@ -943,23 +960,15 @@ icd_dbus_api_scan_req(DBusConnection *conn, DBusMessage *msg, void *user_data)
 
   sender = dbus_message_get_sender(msg);
 
-  for (l = (*listeners)->scan_listeners; l; l = l->next)
+  if (icd_dbus_api_scan_sender_exists((*listeners)->scan_listeners, sender))
   {
-    if (sender)
-    {
-      if (!strcmp((const char *)l->data, sender))
-      {
-        reply = dbus_message_new_error(msg, DBUS_ERROR_LIMITS_EXCEEDED,
-                                       "Scan already started by you");
+    reply = dbus_message_new_error(msg, DBUS_ERROR_LIMITS_EXCEEDED,
+                                   "Scan already started by you");
 
-        if (!reply)
-          return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+    if (!reply)
+      return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
-        goto send_error;
-      }
-    }
-    else
-      ILOG_WARN("icd dbus sender list has NULL item");
+    goto send_error;
   }
 
   dbus_message_iter_init_append(message, &iter1);

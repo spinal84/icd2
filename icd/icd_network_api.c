@@ -457,6 +457,25 @@ err_init:
   return FALSE;
 }
 
+static struct icd_network_module*
+icd_network_api_find_module(gchar *module_name)
+{
+  GSList *module_list = icd_context_get()->nw_module_list;
+
+  while (module_list)
+  {
+    struct icd_network_module *module =
+        (struct icd_network_module *)module_list->data;
+
+    if (!strcmp(module->name, module_name))
+      return module;
+
+    module_list = module_list->next;
+  }
+
+  return NULL;
+}
+
 gboolean
 icd_network_api_load_modules(struct icd_context *icd_ctx)
 {
@@ -511,34 +530,24 @@ icd_network_api_load_modules(struct icd_context *icd_ctx)
 
       while (modules)
       {
-        gchar *name = (gchar *)modules->data;
-        GSList *tmpl = icd_context_get()->nw_module_list;
+        gchar *module_name = (gchar *)modules->data;
+        struct icd_network_module *module =
+                   icd_network_api_find_module(module_name);
 
-        while (tmpl)
+        if (module)
         {
-          struct icd_network_module *module =
-              (struct icd_network_module *)tmpl->data;
-
-          if (!strcmp(name, module->name))
-          {
-            ILOG_DEBUG("network type '%s' uses module '%s'", network_type,
-                       name);
-            type_to_module = g_slist_append(type_to_module, module);
-            break;
-          }
-
-          tmpl = tmpl->next;
+          ILOG_DEBUG("network type '%s' uses module '%s'",
+                     network_type, module_name);
+          type_to_module = g_slist_append(type_to_module, module);
         }
-
-        if (!tmpl)
+        else
         {
-
           ILOG_DEBUG("network type '%s' could not find module '%s'",
-                     network_type, name);
+                     network_type, module_name);
           all_found = FALSE;
         }
 
-        g_free(name);
+        g_free(module_name);
         modules = g_slist_delete_link(modules, modules);
       }
 

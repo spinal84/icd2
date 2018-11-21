@@ -1395,25 +1395,20 @@ static void icd_iap_ip_up_cb(const enum icd_nw_status status,
 static struct icd_network_module*
 icd_iap_next_link_up_module(struct icd_iap *iap)
 {
-  GSList *current_module = iap->current_module;
-
-  if (current_module)
-    current_module = current_module->next;
+  if (iap->current_module)
+    iap->current_module = iap->current_module->next;
   else
-    current_module = iap->network_modules;
+    iap->current_module = iap->network_modules;
 
-  iap->current_module = current_module;
-
-  while (current_module)
+  while (iap->current_module)
   {
     struct icd_network_module *module =
-        (struct icd_network_module *)current_module->data;
+        (struct icd_network_module *)iap->current_module->data;
 
     if (module && module->nw.link_up)
       return module;
 
-    current_module = current_module->next;
-    iap->current_module = current_module;
+    iap->current_module = iap->current_module->next;
   }
 
   return NULL;
@@ -1422,25 +1417,20 @@ icd_iap_next_link_up_module(struct icd_iap *iap)
 static struct icd_network_module*
 icd_iap_next_link_post_up_module(struct icd_iap *iap)
 {
-  GSList *current_module = iap->current_module;
-
-  if (current_module)
-    iap->current_module = current_module->next;
+  if (iap->current_module)
+    iap->current_module = iap->current_module->next;
   else
     iap->current_module = iap->network_modules;
 
-  current_module = iap->current_module;
-
-  while (current_module)
+  while (iap->current_module)
   {
     struct icd_network_module *module =
-        (struct icd_network_module *)current_module->data;
+        (struct icd_network_module *)iap->current_module->data;
 
     if (module && module->nw.link_post_up)
       return module;
 
-    current_module = current_module->next;
-    iap->current_module = current_module;
+    iap->current_module = iap->current_module->next;
   }
 
   return NULL;
@@ -1449,25 +1439,20 @@ icd_iap_next_link_post_up_module(struct icd_iap *iap)
 static struct icd_network_module*
 icd_iap_next_ip_up_module(struct icd_iap *iap)
 {
-  GSList *current_module = iap->current_module;
-
-  if (current_module)
-    iap->current_module = current_module->next;
+  if (iap->current_module)
+    iap->current_module = iap->current_module->next;
   else
     iap->current_module = iap->network_modules;
 
-  current_module = iap->current_module;
-
-  while (current_module)
+  while (iap->current_module)
   {
     struct icd_network_module *module =
-        (struct icd_network_module *)current_module->data;
+        (struct icd_network_module *)iap->current_module->data;
 
     if (module && module->nw.ip_up)
       return module;
 
-    current_module = current_module->next;
-    iap->current_module = current_module;
+    iap->current_module = iap->current_module->next;
   }
 
   return NULL;

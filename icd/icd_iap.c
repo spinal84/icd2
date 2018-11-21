@@ -427,6 +427,62 @@ icd_iap_srv_disconnect_cb(enum icd_srv_status status,
   icd_iap_disconnect_module((struct icd_iap *)disconnect_cb_token);
 }
 
+static void
+icd_iap_script_pre_down(struct icd_iap *iap)
+{
+  gchar *iap_id = NULL;
+  gboolean remove_proxies;
+  GSList *script_env;
+
+  while (iap->script_pids)
+  {
+    pid_t pid = GPOINTER_TO_INT(iap->script_pids->data);
+    ILOG_DEBUG("requesting cancellation of script pid %d", pid);
+    icd_script_cancel(pid);
+    iap->script_pids = g_slist_delete_link(iap->script_pids,
+                                           iap->script_pids);
+  }
+
+  if (iap->id && !iap->id_is_local)
+    iap_id = gconf_escape_key(iap->id, -1);
+
+  remove_proxies = !icd_iap_foreach(icd_iap_check_connected, iap);
+  script_env = iap->script_env;
+
+  if (script_env)
+  {
+    for (; script_env; script_env = script_env->next)
+    {
+      if (script_env->data)
+      {
+        const struct icd_iap_env *env = script_env->data;
+        pid_t pid = icd_script_pre_down(iap->interface_name, iap_id,
+                                        iap->connection.network_type,
+                                        remove_proxies,
+                                        env,
+                                        icd_iap_pre_down_script_done,
+                                        iap);
+        iap->script_pids = g_slist_prepend(iap->script_pids,
+                                           (gpointer)(intptr_t)pid);
+      }
+    }
+  }
+  else
+  {
+    ILOG_INFO("no env vars for pre-down script");
+
+    pid_t pid = icd_script_pre_down(iap->interface_name, iap_id,
+                                    iap->connection.network_type,
+                                    remove_proxies, NULL,
+                                    icd_iap_pre_down_script_done,
+                                    iap);
+    iap->script_pids = g_slist_prepend(iap->script_pids,
+                                       (gpointer)(intptr_t)pid);
+  }
+
+  g_free(iap_id);
+}
+
 /**
  * @brief Start disconnecting the current connecting module if it has not yet
  * called it's callback. Set the state to _down so that the IAP cannot be
@@ -571,64 +627,12 @@ icd_iap_disconnect(struct icd_iap *iap, const gchar *err_str)
       icd_osso_ui_send_save_cancel(iap->save_dlg);
     case ICD_IAP_STATE_SCRIPT_POST_UP:
     case ICD_IAP_STATE_CONNECTED:
-    {
-      gchar *iap_id = NULL;
-      gboolean remove_proxies;
-      GSList *script_env;
-
       ILOG_INFO("disconnect requested for IAP %p", iap);
       iap->err_str = g_strdup(err_str);
       iap->state = ICD_IAP_STATE_CONNECTED_DOWN;
 
-      while (iap->script_pids)
-      {
-        pid_t pid = GPOINTER_TO_INT(iap->script_pids->data);
-        ILOG_DEBUG("requesting cancellation of script pid %d", pid);
-        icd_script_cancel(pid);
-        iap->script_pids = g_slist_delete_link(iap->script_pids,
-                                               iap->script_pids);
-      }
-
-      if (iap->id && !iap->id_is_local)
-        iap_id = gconf_escape_key(iap->id, -1);
-
-      remove_proxies = !icd_iap_foreach(icd_iap_check_connected, iap);
-      script_env = iap->script_env;
-
-      if (script_env)
-      {
-        for (; script_env; script_env = script_env->next)
-        {
-          if (script_env->data)
-          {
-            const struct icd_iap_env *env = script_env->data;
-            pid_t pid = icd_script_pre_down(iap->interface_name, iap_id,
-                                            iap->connection.network_type,
-                                            remove_proxies,
-                                            env,
-                                            icd_iap_pre_down_script_done,
-                                            iap);
-            iap->script_pids = g_slist_prepend(iap->script_pids,
-                                               (gpointer)(intptr_t)pid);
-          }
-        }
-      }
-      else
-      {
-        ILOG_INFO("no env vars for pre-down script");
-
-        pid_t pid = icd_script_pre_down(iap->interface_name, iap_id,
-                                        iap->connection.network_type,
-                                        remove_proxies, NULL,
-                                        icd_iap_pre_down_script_done,
-                                        iap);
-        iap->script_pids = g_slist_prepend(iap->script_pids,
-                                           (gpointer)(intptr_t)pid);
-      }
-
-      g_free(iap_id);
+      icd_iap_script_pre_down(iap);
       break;
-    }
     default:
       ILOG_INFO("disconnect requested for already disconnecting IAP %p", iap);
       break;

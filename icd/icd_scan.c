@@ -678,6 +678,18 @@ icd_scan_cache_rescan(gpointer data)
   return FALSE;
 }
 
+static guint
+icd_scan_timeout_rescan_add(struct icd_network_module *module, guint seconds)
+{
+  if (module->scan_timeout_rescan)
+    g_source_remove(module->scan_timeout_rescan);
+
+  module->scan_timeout_rescan =
+      g_timeout_add(1000 * seconds, icd_scan_cache_rescan, module);
+
+  return module->scan_timeout_rescan;
+}
+
 static void
 icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
             gchar *network_type, const guint network_attrs, gchar *network_id,
@@ -819,12 +831,7 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
       }
     }
 
-    if (module->scan_timeout_rescan)
-      g_source_remove(module->scan_timeout_rescan);
-
-    module->scan_timeout_rescan =
-        g_timeout_add(1000 * module->nw.search_interval,
-                      icd_scan_cache_rescan, module);
+    icd_scan_timeout_rescan_add(module, module->nw.search_interval);
 
     scan_cache_timeout = g_new0(struct icd_scan_cache_timeout, 1);
     scan_cache_timeout->module = module;

@@ -900,6 +900,26 @@ icd_scan_listener_send_cache(struct icd_network_module *module,
   }
 }
 
+static gboolean
+icd_scan_listener_add(struct icd_network_module *module,
+                      const gchar *type,
+                      icd_scan_cb_fn cb,
+                      gpointer user_data)
+{
+  struct icd_scan_listener *listener =
+      g_new0(struct icd_scan_listener, 1);
+
+  listener->cb = cb;
+  listener->user_data = user_data;
+  listener->type = g_strdup(type);
+  module->scan_listener_list =
+      g_slist_prepend(module->scan_listener_list, listener);
+
+  icd_scan_listener_send_cache(module, listener);
+
+  return TRUE;
+}
+
 gboolean
 icd_scan_results_request(const gchar *type, const guint scope,
                          icd_scan_cb_fn cb, gpointer user_data)
@@ -946,18 +966,7 @@ icd_scan_results_request(const gchar *type, const guint scope,
       }
 
       if (!m)
-      {
-        struct icd_scan_listener *listener =
-            g_new0(struct icd_scan_listener, 1);
-
-        listener->cb = cb;
-        listener->user_data = user_data;
-        listener->type = g_strdup(type);
-        module->scan_listener_list =
-            g_slist_prepend(module->scan_listener_list, listener);
-
-        icd_scan_listener_send_cache(module, listener);
-      }
+        icd_scan_listener_add(module, type, cb, user_data);
 
       if ((!scan_listener_exist && !module->scan_timeout_rescan) ||
           module->scope > scope || !icd_scan_cache_has_elements(module) ||

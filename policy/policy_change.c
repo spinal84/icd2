@@ -8,8 +8,10 @@
 #include "policy_api.h"
 #include "icd_log.h"
 
+
 #define POLICY_CHANGE_CALL_TIMEOUT 10 * 1000
 #define POLICY_CHANGE_EXTRA_FILTER "member='" ICD_UI_CHANGE_SIG "'"
+
 
 struct policy_change_data
 {
@@ -21,6 +23,7 @@ struct policy_change_data
   struct icd_policy_request *new_request;
   gpointer done_token;
 };
+
 
 static void
 policy_change_delete_data(struct policy_change_data *data)

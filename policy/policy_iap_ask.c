@@ -8,7 +8,9 @@
 #include "policy_api.h"
 #include "icd_log.h"
 
+
 #define POLICY_IAP_ASK_TIMEOUT 10 * 1000
+
 
 struct policy_iap_ask_data
 {
@@ -18,6 +20,7 @@ struct policy_iap_ask_data
   icd_policy_request_new_cb_fn policy_done_cb;
   gpointer policy_token;
 };
+
 
 static gboolean
 string_equal(const gchar *a, const gchar *b)

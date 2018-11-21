@@ -15,9 +15,11 @@
 #define AUTO_CONNECT_KEY ICD_GCONF_NETWORK_MAPPING "/auto_connect"
 #define SEARCH_INTERVAL_KEY ICD_GCONF_NETWORK_MAPPING "/search_interval"
 
+
 #define POLICY_ALWAYS_ONLINE_IAP_TIMEOUT   500
 #define POLICY_ALWAYS_ONLINE_MCE_FILTER   "member='" MCE_DEVICE_MODE_SIG "'"
 #define POLICY_ALWAYS_ONLINE_MCE_TIMEOUT   5000
+
 
 struct always_online_data
 {
@@ -39,6 +41,7 @@ struct always_online_data
   icd_policy_service_module_check_fn srv_check;
   gint highest_network_priority;
 };
+
 
 static void policy_always_online_run(struct always_online_data *data,
                                      gboolean immediately);

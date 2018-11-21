@@ -124,7 +124,7 @@ icd_dbus_send_msg(DBusConnection *connection, DBusMessage *message)
 
   type = dbus_message_get_type(message);
 
-  if (type == 	DBUS_MESSAGE_TYPE_SIGNAL ||
+  if (type == DBUS_MESSAGE_TYPE_SIGNAL ||
       type == DBUS_MESSAGE_TYPE_METHOD_RETURN ||
       type == DBUS_MESSAGE_TYPE_ERROR)
   {

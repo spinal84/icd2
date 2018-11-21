@@ -1392,6 +1392,33 @@ static void icd_iap_ip_up_cb(const enum icd_nw_status status,
   va_end(ap);
 }
 
+static struct icd_network_module*
+icd_iap_next_link_up_module(struct icd_iap *iap)
+{
+  GSList *current_module = iap->current_module;
+
+  if (current_module)
+    current_module = current_module->next;
+  else
+    current_module = iap->network_modules;
+
+  iap->current_module = current_module;
+
+  while (current_module)
+  {
+    struct icd_network_module *module =
+        (struct icd_network_module *)current_module->data;
+
+    if (module && module->nw.link_up)
+      return module;
+
+    current_module = current_module->next;
+    iap->current_module = current_module;
+  }
+
+  return NULL;
+}
+
 static void
 icd_iap_module_next(struct icd_iap *iap)
 {
@@ -1406,33 +1433,19 @@ icd_iap_module_next(struct icd_iap *iap)
     case ICD_IAP_STATE_SCRIPT_PRE_UP:
     case ICD_IAP_STATE_LINK_UP:
     {
+      struct icd_network_module *module;
+
       iap->state = ICD_IAP_STATE_LINK_UP;
-      current_module = iap->current_module;
+      module = icd_iap_next_link_up_module(iap);
 
-      if (current_module)
-        current_module = current_module->next;
-      else
-        current_module = iap->network_modules;
-
-      iap->current_module = current_module;
-
-      while (current_module)
+      if (module)
       {
-        struct icd_network_module *module =
-            (struct icd_network_module *)current_module->data;
-
-        if (module && module->nw.link_up)
-        {
-          ILOG_INFO("calling module '%s' link_up", module->name);
-          module->nw.link_up(iap->connection.network_type,
-                             iap->connection.network_attrs,
-                             iap->connection.network_id, icd_iap_link_up_cb,
-                             iap, &module->nw.private);
-          return;
-        }
-
-        current_module = current_module->next;
-        iap->current_module = current_module;
+        ILOG_INFO("calling module '%s' link_up", module->name);
+        module->nw.link_up(iap->connection.network_type,
+                           iap->connection.network_attrs,
+                           iap->connection.network_id, icd_iap_link_up_cb,
+                           iap, &module->nw.private);
+        return;
       }
 
       ILOG_DEBUG("No more link_up functions found for network type '%s'",

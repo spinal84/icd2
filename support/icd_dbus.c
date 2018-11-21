@@ -189,13 +189,14 @@ icd_dbus_connect_path(DBusConnection *connection, const char *path,
   return FALSE;
 }
 
-gboolean
-icd_dbus_register_system_service(const char *path, const char *service,
-                                 guint service_flags,
-                                 DBusObjectPathMessageFunction cb,
-                                 void *user_data)
+static gboolean
+icd_dbus_register_service(DBusConnection *connection,
+                          const char *path,
+                          const char *service,
+                          guint service_flags,
+                          DBusObjectPathMessageFunction cb,
+                          void *user_data)
 {
-  DBusConnection *connection = icd_dbus_get_system_bus();
   DBusError error;
 
   g_return_val_if_fail(connection != NULL, FALSE);
@@ -212,6 +213,16 @@ icd_dbus_register_system_service(const char *path, const char *service,
   dbus_error_free(&error);
 
   return FALSE;
+}
+
+gboolean
+icd_dbus_register_system_service(const char *path, const char *service,
+                                 guint service_flags,
+                                 DBusObjectPathMessageFunction cb,
+                                 void *user_data)
+{
+  return icd_dbus_register_service(icd_dbus_get_system_bus(), path, service,
+                                   service_flags, cb, user_data);
 }
 
 gboolean

@@ -453,6 +453,16 @@ icd_scan_expire_network_for_hash(gpointer key, gpointer value,
   return FALSE;
 }
 
+static void
+icd_scan_timeout_free(struct icd_scan_cache_timeout *timeout_data)
+{
+  timeout_data->module->scan_timeout_list =
+      g_slist_remove(timeout_data->module->scan_timeout_list,
+                     timeout_data);
+
+  g_free(timeout_data);
+}
+
 /**
  * @brief  Cache expiry function
  *
@@ -464,30 +474,28 @@ icd_scan_expire_network_for_hash(gpointer key, gpointer value,
 static gboolean
 icd_scan_cache_expire(gpointer data)
 {
-  struct icd_scan_cache_timeout *scan_cache_timeout;
+  struct icd_scan_cache_timeout *timeout_data;
 
-  scan_cache_timeout = (struct icd_scan_cache_timeout *)data;
+  timeout_data = (struct icd_scan_cache_timeout *)data;
 
-  if (scan_cache_timeout->module->scan_progress)
+  if (timeout_data->module->scan_progress)
+  {
     ILOG_DEBUG("deferred scan cache expiration for '%s' due to new scan",
-               scan_cache_timeout->module->name);
+               timeout_data->module->name);
+  }
   else
   {
     struct icd_scan_expire_network_data user_data;
 
-    user_data.module = scan_cache_timeout->module;
-    user_data.expire = time(0) - scan_cache_timeout->module->nw.search_lifetime;
+    user_data.module = timeout_data->module;
+    user_data.expire = time(0) - timeout_data->module->nw.search_lifetime;
 
-    g_hash_table_foreach_remove(scan_cache_timeout->module->scan_cache_table,
+    g_hash_table_foreach_remove(timeout_data->module->scan_cache_table,
                                 (GHRFunc)icd_scan_expire_network_for_hash,
                                 &user_data);
   }
 
-  scan_cache_timeout->module->scan_timeout_list =
-      g_slist_remove(scan_cache_timeout->module->scan_timeout_list,
-                     scan_cache_timeout);
-
-  g_free(scan_cache_timeout);
+  icd_scan_timeout_free(timeout_data);
 
   return FALSE;
 }

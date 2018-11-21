@@ -850,20 +850,10 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
            network_type, network_id);
 }
 
-static gboolean
-icd_scan_network(struct icd_network_module *module, const gchar *network_type)
+static void
+icd_scan_status_start(struct icd_network_module *module)
 {
   GSList *l;
-
-  if (module->scan_progress)
-    return TRUE;
-
-  if (!module->nw.start_search)
-  {
-    ILOG_WARN("module '%s' does not have a scan function", module->name);
-    return FALSE;
-  }
-
 
   for (l = module->network_types; l; l = l->next)
   {
@@ -873,6 +863,21 @@ icd_scan_network(struct icd_network_module *module, const gchar *network_type)
       icd_status_scan_start((const gchar *)l->data);
     }
   }
+}
+
+static gboolean
+icd_scan_network(struct icd_network_module *module, const gchar *network_type)
+{
+  if (module->scan_progress)
+    return TRUE;
+
+  if (!module->nw.start_search)
+  {
+    ILOG_WARN("module '%s' does not have a scan function", module->name);
+    return FALSE;
+  }
+
+  icd_scan_status_start(module);
 
   module->scan_progress = TRUE;
   module->nw.start_search(NULL, module->scope, icd_scan_cb, module,

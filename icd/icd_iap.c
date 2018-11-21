@@ -1419,6 +1419,33 @@ icd_iap_next_link_up_module(struct icd_iap *iap)
   return NULL;
 }
 
+static struct icd_network_module*
+icd_iap_next_link_post_up_module(struct icd_iap *iap)
+{
+  GSList *current_module = iap->current_module;
+
+  if (current_module)
+    iap->current_module = current_module->next;
+  else
+    iap->current_module = iap->network_modules;
+
+  current_module = iap->current_module;
+
+  while (current_module)
+  {
+    struct icd_network_module *module =
+        (struct icd_network_module *)current_module->data;
+
+    if (module && module->nw.link_post_up)
+      return module;
+
+    current_module = current_module->next;
+    iap->current_module = current_module;
+  }
+
+  return NULL;
+}
+
 static void
 icd_iap_module_next(struct icd_iap *iap)
 {
@@ -1453,35 +1480,21 @@ icd_iap_module_next(struct icd_iap *iap)
     }
     case ICD_IAP_STATE_LINK_POST_UP:
     {
-      current_module = iap->current_module;
+      struct icd_network_module *module;
+
       iap->state = ICD_IAP_STATE_LINK_POST_UP;
+      module = icd_iap_next_link_post_up_module(iap);
 
-      if (current_module)
-        iap->current_module = current_module->next;
-      else
-        iap->current_module = iap->network_modules;
-
-      current_module = iap->current_module;
-
-      while (current_module)
+      if (module)
       {
-        struct icd_network_module *module =
-            (struct icd_network_module *)current_module->data;
+        ILOG_DEBUG("calling module '%s' link_post_up", module->name);
 
-        if (module && module->nw.link_post_up)
-        {
-          ILOG_DEBUG("calling module '%s' link_post_up", module->name);
-
-          module->nw.link_post_up(iap->connection.network_type,
-                                  iap->connection.network_attrs,
-                                  iap->connection.network_id,
-                                  iap->interface_name, icd_iap_link_post_up_cb,
-                                  iap, &module->nw.private);
-          return;
-        }
-
-        current_module = current_module->next;
-        iap->current_module = current_module;
+        module->nw.link_post_up(iap->connection.network_type,
+                                iap->connection.network_attrs,
+                                iap->connection.network_id,
+                                iap->interface_name, icd_iap_link_post_up_cb,
+                                iap, &module->nw.private);
+        return;
       }
 
       ILOG_DEBUG("No other link_post_up functions found");

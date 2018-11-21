@@ -1392,8 +1392,16 @@ static void icd_iap_ip_up_cb(const enum icd_nw_status status,
   va_end(ap);
 }
 
+/**
+ * Find the next module that has implemented xxx()
+ *
+ * @param iap     the IAP
+ * @param offset  method offset in #icd_nw_api
+ *
+ * @return        the next module or NULL if none
+ */
 static struct icd_network_module*
-icd_iap_next_link_up_module(struct icd_iap *iap)
+icd_iap_next_xxx_module(struct icd_iap *iap, glong offset)
 {
   if (iap->current_module)
     iap->current_module = iap->current_module->next;
@@ -1405,51 +1413,7 @@ icd_iap_next_link_up_module(struct icd_iap *iap)
     struct icd_network_module *module =
         (struct icd_network_module *)iap->current_module->data;
 
-    if (module && module->nw.link_up)
-      return module;
-
-    iap->current_module = iap->current_module->next;
-  }
-
-  return NULL;
-}
-
-static struct icd_network_module*
-icd_iap_next_link_post_up_module(struct icd_iap *iap)
-{
-  if (iap->current_module)
-    iap->current_module = iap->current_module->next;
-  else
-    iap->current_module = iap->network_modules;
-
-  while (iap->current_module)
-  {
-    struct icd_network_module *module =
-        (struct icd_network_module *)iap->current_module->data;
-
-    if (module && module->nw.link_post_up)
-      return module;
-
-    iap->current_module = iap->current_module->next;
-  }
-
-  return NULL;
-}
-
-static struct icd_network_module*
-icd_iap_next_ip_up_module(struct icd_iap *iap)
-{
-  if (iap->current_module)
-    iap->current_module = iap->current_module->next;
-  else
-    iap->current_module = iap->network_modules;
-
-  while (iap->current_module)
-  {
-    struct icd_network_module *module =
-        (struct icd_network_module *)iap->current_module->data;
-
-    if (module && module->nw.ip_up)
+    if (module && G_STRUCT_MEMBER(gpointer, &module->nw, offset))
       return module;
 
     iap->current_module = iap->current_module->next;
@@ -1473,7 +1437,8 @@ icd_iap_module_next(struct icd_iap *iap)
       struct icd_network_module *module;
 
       iap->state = ICD_IAP_STATE_LINK_UP;
-      module = icd_iap_next_link_up_module(iap);
+      module = icd_iap_next_xxx_module(iap,
+          G_STRUCT_OFFSET(struct icd_nw_api, link_up));
 
       if (module)
       {
@@ -1493,7 +1458,8 @@ icd_iap_module_next(struct icd_iap *iap)
       struct icd_network_module *module;
 
       iap->state = ICD_IAP_STATE_LINK_POST_UP;
-      module = icd_iap_next_link_post_up_module(iap);
+      module = icd_iap_next_xxx_module(iap,
+          G_STRUCT_OFFSET(struct icd_nw_api, link_post_up));
 
       if (module)
       {
@@ -1514,7 +1480,8 @@ icd_iap_module_next(struct icd_iap *iap)
       struct icd_network_module *module;
 
       iap->state = ICD_IAP_STATE_IP_UP;
-      module = icd_iap_next_ip_up_module(iap);
+      module = icd_iap_next_xxx_module(iap,
+          G_STRUCT_OFFSET(struct icd_nw_api, ip_up));
 
       if (module)
       {

@@ -691,6 +691,24 @@ icd_scan_timeout_rescan_add(struct icd_network_module *module, guint seconds)
 }
 
 static void
+icd_scan_status_stop(struct icd_network_module *module)
+{
+  GSList *l;
+
+  if (module->nw.start_search)
+  {
+    for (l = module->network_types; l; l = l->next)
+    {
+      if (l->data)
+      {
+        ILOG_INFO("scan stop for type '%s'", (const gchar *)l->data);
+        icd_status_scan_stop((const gchar *)l->data);
+      }
+    }
+  }
+}
+
+static void
 icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
             gchar *network_type, const guint network_attrs, gchar *network_id,
             enum icd_nw_levels signal, gchar *station_id, gint dB,
@@ -819,17 +837,7 @@ icd_scan_cb(enum icd_network_search_status status, gchar *network_name,
     module->scan_progress = FALSE;
     ILOG_INFO("module '%s' scan completed", module->name);
 
-    if (module->nw.start_search)
-    {
-      for (l = module->network_types; l; l = l->next)
-      {
-        if (l->data)
-        {
-          ILOG_INFO("scan stop for type '%s'", (const gchar *)l->data);
-          icd_status_scan_stop((const gchar *)l->data);
-        }
-      }
-    }
+    icd_scan_status_stop(module);
 
     icd_scan_timeout_rescan_add(module, module->nw.search_interval);
 

@@ -1446,11 +1446,36 @@ icd_iap_next_link_post_up_module(struct icd_iap *iap)
   return NULL;
 }
 
+static struct icd_network_module*
+icd_iap_next_ip_up_module(struct icd_iap *iap)
+{
+  GSList *current_module = iap->current_module;
+
+  if (current_module)
+    iap->current_module = current_module->next;
+  else
+    iap->current_module = iap->network_modules;
+
+  current_module = iap->current_module;
+
+  while (current_module)
+  {
+    struct icd_network_module *module =
+        (struct icd_network_module *)current_module->data;
+
+    if (module && module->nw.ip_up)
+      return module;
+
+    current_module = current_module->next;
+    iap->current_module = current_module;
+  }
+
+  return NULL;
+}
+
 static void
 icd_iap_module_next(struct icd_iap *iap)
 {
-  GSList *current_module;
-
   ILOG_WARN("connecting iap %p in state %s: interface is '%s'", iap,
             icd_iap_state_names[iap->state],
             iap->interface_name);
@@ -1501,34 +1526,20 @@ icd_iap_module_next(struct icd_iap *iap)
     }
     case ICD_IAP_STATE_IP_UP:
     {
-      current_module = iap->current_module;
+      struct icd_network_module *module;
+
       iap->state = ICD_IAP_STATE_IP_UP;
+      module = icd_iap_next_ip_up_module(iap);
 
-      if (current_module)
-        iap->current_module = current_module->next;
-      else
-        iap->current_module = iap->network_modules;
-
-      current_module = iap->current_module;
-
-      while (current_module)
+      if (module)
       {
-        struct icd_network_module *module =
-            (struct icd_network_module *)current_module->data;
-
-        if (module && module->nw.ip_up)
-        {
-          ILOG_INFO("calling module '%s' ip_up", module->name);
-          module->nw.ip_up(iap->connection.network_type,
-                           iap->connection.network_attrs,
-                           iap->connection.network_id,
-                           iap->interface_name, icd_iap_ip_up_cb,
-                           iap, &module->nw.private);
-          return;
-        }
-
-        current_module = current_module->next;
-        iap->current_module = current_module;
+        ILOG_INFO("calling module '%s' ip_up", module->name);
+        module->nw.ip_up(iap->connection.network_type,
+                         iap->connection.network_attrs,
+                         iap->connection.network_id,
+                         iap->interface_name, icd_iap_ip_up_cb,
+                         iap, &module->nw.private);
+        return;
       }
 
       ILOG_DEBUG("No other ip_up functions found");

@@ -881,6 +881,25 @@ icd_scan_network(struct icd_network_module *module, const gchar *network_type)
   return TRUE;
 }
 
+static void
+icd_scan_listener_send_cache(struct icd_network_module *module,
+                             struct icd_scan_listener *listener)
+{
+  if (icd_scan_cache_has_elements(module))
+  {
+    g_hash_table_foreach(module->scan_cache_table, icd_scan_listener_send_list, listener);
+
+    if (module->scan_timeout_rescan)
+    {
+      struct icd_scan_cache cache_entry;
+
+      memset (&cache_entry, 0, sizeof(cache_entry));
+      cache_entry.network_type = listener->type;
+      icd_scan_listener_send_entry(NULL, &cache_entry, listener, ICD_SCAN_COMPLETE);
+    }
+  }
+}
+
 gboolean
 icd_scan_results_request(const gchar *type, const guint scope,
                          icd_scan_cb_fn cb, gpointer user_data)
@@ -937,19 +956,7 @@ icd_scan_results_request(const gchar *type, const guint scope,
         module->scan_listener_list =
             g_slist_prepend(module->scan_listener_list, listener);
 
-        if (icd_scan_cache_has_elements(module))
-        {
-          g_hash_table_foreach(module->scan_cache_table, icd_scan_listener_send_list, listener);
-
-          if (module->scan_timeout_rescan)
-          {
-            struct icd_scan_cache cache_entry;
-
-            memset (&cache_entry, 0, sizeof(cache_entry));
-            cache_entry.network_type = listener->type;
-            icd_scan_listener_send_entry(NULL, &cache_entry, listener, ICD_SCAN_COMPLETE);
-          }
-        }
+        icd_scan_listener_send_cache(module, listener);
       }
 
       if ((!scan_listener_exist && !module->scan_timeout_rescan) ||

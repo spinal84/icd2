@@ -144,14 +144,15 @@ icd_dbus_send_system_msg(DBusMessage *message)
   return icd_dbus_send_msg(icd_dbus_get_system_bus(), message);
 }
 
-void
-icd_dbus_unregister_system_service(const char *path, const char *service)
+static void
+icd_dbus_unregister_service(DBusConnection *connection,
+                            const char *path,
+                            const char *service)
 {
-  DBusConnection *dbus = icd_dbus_get_system_bus();
   DBusError error;
 
   dbus_error_init(&error);
-  dbus_bus_release_name(dbus, service, &error);
+  dbus_bus_release_name(connection, service, &error);
 
   if (dbus_error_is_set(&error))
   {
@@ -159,8 +160,14 @@ icd_dbus_unregister_system_service(const char *path, const char *service)
     dbus_error_free(&error);
   }
 
-  if (!dbus_connection_unregister_object_path(dbus, path))
+  if (!dbus_connection_unregister_object_path(connection, path))
     ILOG_ERR("Could not unregister object path '%s'", path);
+}
+
+void
+icd_dbus_unregister_system_service(const char *path, const char *service)
+{
+  icd_dbus_unregister_service(icd_dbus_get_system_bus(), path, service);
 }
 
 gboolean

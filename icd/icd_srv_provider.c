@@ -344,64 +344,66 @@ icd_srv_provider_init(const gchar *module_name, void *handle,
     module->handle = handle;
 
     if (init(&module->srv, icd_srv_provider_watch_pid, module,
-                      icd_srv_provider_close, icd_srv_provider_limited_conn))
+             icd_srv_provider_close, icd_srv_provider_limited_conn))
     {
-      if (module->srv.version)
+      do
       {
-        if (module->srv.identify)
+        if (!module->srv.version)
         {
-          if (module->srv.connect)
-          {
-            if (icd_version_compare(module->srv.version, "0.54") >= 0)
-            {
-              GSList *nt = data->network_types;
-
-              module->name = g_strdup(module_name);
-
-              for (nt = data->network_types; nt; nt = nt->next )
-              {
-                const gchar *network_type = (const gchar *)nt->data;
-
-                if (network_type)
-                {
-                  GSList *nw_type_to_srv;
-
-                  ILOG_INFO("service provider module %p '%s', network type '%s'",
-                            module, module->name, network_type);
-
-                  nw_type_to_srv = (GSList *)g_hash_table_lookup(
-                        data->icd_ctx->nw_type_to_srv_module, network_type);
-
-                  g_hash_table_insert(data->icd_ctx->nw_type_to_srv_module,
-                                      g_strdup(network_type),
-                                      g_slist_prepend(nw_type_to_srv, module));
-                }
-              }
-
-              data->icd_ctx->srv_module_list =
-                  g_slist_prepend(data->icd_ctx->srv_module_list, module);
-              rv = TRUE;
-            }
-            else
-            {
-              ILOG_ERR("Service module '%s' version %s compiled against API < 0.54, not loading it",
-                       module_name, module->srv.version);
-            }
-          }
-          else
-          {
-            ILOG_ERR("Service module '%s' did not have a connect function",
-                     module_name);
-          }
+          ILOG_ERR("Service module '%s' did not set version", module_name);
+          break;
         }
-        else
+
+        if (!module->srv.identify)
         {
           ILOG_ERR("Service module '%s' did not have an identify function",
                    module_name);
+          break;
         }
-      }
-      else
-        ILOG_ERR("Service module '%s' did not set version", module_name);
+
+        if (!module->srv.connect)
+        {
+          ILOG_ERR("Service module '%s' did not have a connect function",
+                   module_name);
+          break;
+        }
+
+        if (icd_version_compare(module->srv.version, "0.54") < 0)
+        {
+          ILOG_ERR("Service module '%s' version %s compiled against API < 0.54, not loading it",
+                   module_name, module->srv.version);
+          break;
+        }
+
+        GSList *nt = data->network_types;
+
+        module->name = g_strdup(module_name);
+
+        for (nt = data->network_types; nt; nt = nt->next )
+        {
+          const gchar *network_type = (const gchar *)nt->data;
+
+          if (network_type)
+          {
+            GSList *nw_type_to_srv;
+
+            ILOG_INFO("service provider module %p '%s', network type '%s'",
+                      module, module->name, network_type);
+
+            nw_type_to_srv = (GSList *)g_hash_table_lookup(
+                  data->icd_ctx->nw_type_to_srv_module, network_type);
+
+            g_hash_table_insert(data->icd_ctx->nw_type_to_srv_module,
+                                g_strdup(network_type),
+                                g_slist_prepend(nw_type_to_srv, module));
+          }
+        }
+
+        data->icd_ctx->srv_module_list =
+            g_slist_prepend(data->icd_ctx->srv_module_list, module);
+
+        rv = TRUE;
+      } while(0);
 
       if (!rv)
       {

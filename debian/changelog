@@ -1,3 +1,11 @@
+icd2 (0.93) unstable; urgency=medium
+
+  * Add functions according to API docs
+  * Rewrite some code for easier reading
+  * Minor fixes and optimization
+
+ -- Arthur Demchenkov <spinal.by@gmail.com>  Sun, 25 Nov 2018 14:10:15 +0300
+
 icd2 (0.92) unstable; urgency=medium
 
   * Fix pid_t mess

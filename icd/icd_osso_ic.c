@@ -89,7 +89,8 @@ struct icd_osso_ic_mcall_data {
  * @return the D-Bus reply or NULL if a reply is sent later
  *
  */
-typedef DBusMessage*(* icd_osso_ic_message_handler)(DBusMessage *request, void *user_data);
+typedef DBusMessage* (*icd_osso_ic_message_handler) (DBusMessage *request,
+                                                     void *user_data);
 
 /** Structure containing information to match a D-Bus message with the correct
  * handler function

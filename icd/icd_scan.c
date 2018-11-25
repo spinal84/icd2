@@ -9,7 +9,8 @@
 #include <time.h>
 #include <string.h>
 
-static gboolean icd_scan_network(struct icd_network_module *module, const gchar *network_type);
+static gboolean icd_scan_network(struct icd_network_module *module,
+                                 const gchar *network_type);
 
 /** scan listener list data */
 struct icd_scan_listener {
@@ -73,7 +74,8 @@ string_equal(const char *a, const char *b)
  *
  */
 void
-icd_scan_listener_remove(struct icd_network_module *module, icd_scan_cb_fn cb,
+icd_scan_listener_remove(struct icd_network_module *module,
+                         icd_scan_cb_fn cb,
                          gpointer user_data)
 {
   GSList *l = module->scan_listener_list;
@@ -919,7 +921,8 @@ icd_scan_listener_send_cache(struct icd_network_module *module,
 {
   if (icd_scan_cache_has_elements(module))
   {
-    g_hash_table_foreach(module->scan_cache_table, icd_scan_listener_send_list, listener);
+    g_hash_table_foreach(
+        module->scan_cache_table, icd_scan_listener_send_list, listener);
 
     if (module->scan_timeout_rescan)
     {
@@ -927,7 +930,9 @@ icd_scan_listener_send_cache(struct icd_network_module *module,
 
       memset (&cache_entry, 0, sizeof(cache_entry));
       cache_entry.network_type = listener->type;
-      icd_scan_listener_send_entry(NULL, &cache_entry, listener, ICD_SCAN_COMPLETE);
+
+      icd_scan_listener_send_entry(
+               NULL, &cache_entry, listener, ICD_SCAN_COMPLETE);
     }
   }
 }

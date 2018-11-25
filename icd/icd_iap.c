@@ -22,11 +22,18 @@
 
 static gboolean icd_iap_run_restart(struct icd_iap *iap);
 static gboolean icd_iap_run_renew(struct icd_iap *iap);
-static void icd_iap_disconnect_cb(const enum icd_nw_status status, const gpointer cb_token);
-static void icd_iap_srv_disconnect_cb(enum icd_srv_status status, gpointer disconnect_cb_token);
 static void icd_iap_run_post_down_scripts(struct icd_iap *iap);
-static void icd_iap_post_up_script_done(const pid_t pid, const gint exit_value, gpointer user_data);
 static void icd_iap_module_next(struct icd_iap *iap);
+
+static void icd_iap_disconnect_cb(const enum icd_nw_status status,
+                                  const gpointer cb_token);
+
+static void icd_iap_srv_disconnect_cb(enum icd_srv_status status,
+                                      gpointer disconnect_cb_token);
+
+static void icd_iap_post_up_script_done(const pid_t pid,
+                                        const gint exit_value,
+                                        gpointer user_data);
 
 /** names for the different states */
 const gchar *icd_iap_state_names[ICD_IAP_MAX_STATES] = {

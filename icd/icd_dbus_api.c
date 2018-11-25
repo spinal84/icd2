@@ -86,7 +86,9 @@ struct icd_dbus_api_foreach_data {
   icd_dbus_api_foreach_send_fn send_fn;
 };
 
-static DBusHandlerResult icd_dbus_api_state_req(DBusConnection *conn, DBusMessage *msg, void *user_data);
+static DBusHandlerResult icd_dbus_api_state_req(DBusConnection *conn,
+                                                DBusMessage *msg,
+                                                void *user_data);
 
 static gboolean
 icd_dbus_api_foreach_iap_req(DBusMessage *message,
@@ -146,59 +148,59 @@ icd_dbus_api_addrinfo_cb(gpointer addr_info_cb_token, const gchar *network_type,
   addrinfo_data = (struct icd_dbus_api_addrinfo_data *)addr_info_cb_token;
   iter = &addrinfo_data->iter2;
 
-  if (dbus_message_iter_open_container(&addrinfo_data->iter2,
-                                        DBUS_TYPE_STRUCT , NULL, &sub))
+  if (!dbus_message_iter_open_container(&addrinfo_data->iter2,
+                                         DBUS_TYPE_STRUCT , NULL, &sub))
   {
-    s = ip_address ? &ip_address : &empty;
-
-    if(dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s))
-    {
-      s = ip_netmask ? &ip_netmask : &empty;
-
-      if (dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s))
-      {
-        s = ip_gateway ? &ip_gateway : &empty;
-
-        if (dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s))
-        {
-          s = ip_dns1 ? &ip_dns1 : &empty;
-
-          if (dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s))
-          {
-            s = ip_dns2 ? &ip_dns2 : &empty;
-            if(dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s))
-            {
-              s = ip_dns3 ? &ip_dns3 : &empty;
-
-              if (dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s) &&
-                  dbus_message_iter_close_container(iter, &sub))
-              {
-                ++addrinfo_data->called;
-
-                ILOG_DEBUG("addrinfo called %d/%d times in callback",
-                           addrinfo_data->called, addrinfo_data->total);
-
-                if (addrinfo_data->total == addrinfo_data->called)
-                {
-                  ILOG_DEBUG("addrinfo close array in cb");
-
-                  if (dbus_message_iter_close_container(&addrinfo_data->iter1,
-                                                        iter))
-                  {
-                    icd_dbus_send_system_msg(addrinfo_data->message);
-                    dbus_message_unref(addrinfo_data->message);
-                    g_free(addrinfo_data);
-                    return;
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    goto out;
   }
 
+  s = ip_address ? &ip_address : &empty;
+
+  if(!dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s))
+    goto out;
+
+  s = ip_netmask ? &ip_netmask : &empty;
+
+  if (!dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s))
+    goto out;
+
+  s = ip_gateway ? &ip_gateway : &empty;
+
+  if (!dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s))
+    goto out;
+
+  s = ip_dns1 ? &ip_dns1 : &empty;
+
+  if (!dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s))
+    goto out;
+
+  s = ip_dns2 ? &ip_dns2 : &empty;
+
+  if(!dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s))
+    goto out;
+
+  s = ip_dns3 ? &ip_dns3 : &empty;
+
+  if (!dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, s) ||
+      !dbus_message_iter_close_container(iter, &sub))
+  {
+    goto out;
+  }
+
+  addrinfo_data->called++;
+
+  ILOG_DEBUG("addrinfo called %d/%d times in callback",
+             addrinfo_data->called, addrinfo_data->total);
+
+  if (addrinfo_data->called == addrinfo_data->total)
+  {
+    ILOG_DEBUG("addrinfo close array in cb");
+
+    if (dbus_message_iter_close_container(&addrinfo_data->iter1, iter))
+      icd_dbus_send_system_msg(addrinfo_data->message);
+  }
+
+out:
   if (addrinfo_data->message)
     dbus_message_unref(addrinfo_data->message);
 
@@ -220,92 +222,110 @@ icd_dbus_api_addrinfo_send(struct icd_iap *iap,
   message = dbus_message_new_signal(ICD_DBUS_API_PATH,
                                     ICD_DBUS_API_INTERFACE,
                                     ICD_DBUS_API_ADDRINFO_SIG);
+
   addrinfo_data->message = message;
 
-  if (message)
+  if (message == NULL)
   {
-    if (foreach_data->sender)
-      dbus_message_set_destination(message, foreach_data->sender);
-
-    dbus_message_iter_init_append(addrinfo_data->message, &addrinfo_data->iter1);
-    s = iap->connection.service_type ?
-          (const gchar **)&iap->connection.service_type : &empty;
-
-    if (dbus_message_iter_append_basic(&addrinfo_data->iter1,
-                                       DBUS_TYPE_STRING, s))
-    {
-      if (dbus_message_iter_append_basic(&addrinfo_data->iter1,
-                                         DBUS_TYPE_UINT32,
-                                         &iap->connection.service_attrs))
-      {
-        s = iap->connection.service_id ?
-              (const gchar **)&iap->connection.service_id : &empty;
-
-        if (dbus_message_iter_append_basic(&addrinfo_data->iter1,
-                                            DBUS_TYPE_STRING, s))
-        {
-          s = iap->connection.network_type ?
-                (const gchar **)&iap->connection.network_type : &empty;
-
-          if (dbus_message_iter_append_basic(&addrinfo_data->iter1,
-                                             DBUS_TYPE_STRING, s))
-          {
-            if (dbus_message_iter_append_basic(&addrinfo_data->iter1,
-                                               DBUS_TYPE_UINT32,
-                                               &iap->connection.network_attrs))
-            {
-              network_id = iap->connection.network_id;
-
-              if (!network_id)
-                network_id = empty;
-
-              if (dbus_message_iter_open_container(&addrinfo_data->iter1,
-                                                   DBUS_TYPE_ARRAY,
-                                                   DBUS_TYPE_BYTE_AS_STRING,
-                                                   &sub))
-              {
-
-                if (dbus_message_iter_append_fixed_array(
-                      &sub, DBUS_TYPE_BYTE, &network_id,strlen(network_id) + 1))
-                {
-                  if (dbus_message_iter_close_container(&addrinfo_data->iter1,
-                                                        &sub) &&
-                      dbus_message_iter_open_container(&addrinfo_data->iter1,
-                                                       DBUS_TYPE_ARRAY,
-                                                       "(ssssss)",
-                                                       &addrinfo_data->iter2))
-                  {
-                    addrinfo_data->total = icd_iap_get_ipinfo(
-                          iap, icd_dbus_api_addrinfo_cb, addrinfo_data);
-
-                    ILOG_DEBUG("addrinfo called %d/%d times",
-                               addrinfo_data->called, addrinfo_data->total);
-
-                    if (addrinfo_data->total != addrinfo_data->called)
-                      return TRUE;
-
-                    ILOG_DEBUG("addrinfo closing array");
-
-                    if (dbus_message_iter_close_container(
-                          &addrinfo_data->iter1, &addrinfo_data->iter2))
-                    {
-                      icd_dbus_send_system_msg(addrinfo_data->message);
-                      dbus_message_unref(addrinfo_data->message);
-                      g_free(addrinfo_data);
-                      return TRUE;
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  else
     ILOG_ERR("dbus api out of memory when creating addrinfo signal");
+    goto fail;
+  }
 
+  if (foreach_data->sender)
+    dbus_message_set_destination(message, foreach_data->sender);
+
+  dbus_message_iter_init_append(addrinfo_data->message, &addrinfo_data->iter1);
+
+  s = iap->connection.service_type ?
+        (const gchar **)&iap->connection.service_type : &empty;
+
+  if (!dbus_message_iter_append_basic(&addrinfo_data->iter1,
+                                      DBUS_TYPE_STRING, s))
+  {
+    goto fail;
+  }
+
+  if (!dbus_message_iter_append_basic(&addrinfo_data->iter1,
+                                      DBUS_TYPE_UINT32,
+                                      &iap->connection.service_attrs))
+  {
+    goto fail;
+  }
+
+  s = iap->connection.service_id ?
+        (const gchar **)&iap->connection.service_id : &empty;
+
+  if (!dbus_message_iter_append_basic(&addrinfo_data->iter1,
+                                      DBUS_TYPE_STRING, s))
+  {
+    goto fail;
+  }
+
+  s = iap->connection.network_type ?
+        (const gchar **)&iap->connection.network_type : &empty;
+
+  if (!dbus_message_iter_append_basic(&addrinfo_data->iter1,
+                                      DBUS_TYPE_STRING, s))
+  {
+    goto fail;
+  }
+
+  if (!dbus_message_iter_append_basic(&addrinfo_data->iter1,
+                                      DBUS_TYPE_UINT32,
+                                      &iap->connection.network_attrs))
+  {
+    goto fail;
+  }
+
+  network_id = iap->connection.network_id;
+
+  if (!network_id)
+    network_id = empty;
+
+  if (!dbus_message_iter_open_container(&addrinfo_data->iter1,
+                                        DBUS_TYPE_ARRAY,
+                                        DBUS_TYPE_BYTE_AS_STRING,
+                                        &sub))
+  {
+    goto fail;
+  }
+
+  if (!dbus_message_iter_append_fixed_array(
+           &sub, DBUS_TYPE_BYTE, &network_id, strlen(network_id) + 1))
+  {
+    goto fail;
+  }
+
+  if (!dbus_message_iter_close_container(&addrinfo_data->iter1, &sub) ||
+      !dbus_message_iter_open_container(&addrinfo_data->iter1,
+                                        DBUS_TYPE_ARRAY,
+                                        "(ssssss)",
+                                        &addrinfo_data->iter2))
+  {
+    goto fail;
+  }
+
+  addrinfo_data->total = icd_iap_get_ipinfo(
+                             iap, icd_dbus_api_addrinfo_cb, addrinfo_data);
+
+  ILOG_DEBUG("addrinfo called %d/%d times",
+             addrinfo_data->called, addrinfo_data->total);
+
+  if (addrinfo_data->called != addrinfo_data->total)
+    return TRUE;
+
+  ILOG_DEBUG("addrinfo closing array");
+
+  if (dbus_message_iter_close_container(
+                  &addrinfo_data->iter1, &addrinfo_data->iter2))
+  {
+    icd_dbus_send_system_msg(addrinfo_data->message);
+    dbus_message_unref(addrinfo_data->message);
+    g_free(addrinfo_data);
+    return TRUE;
+  }
+
+fail:
   if (addrinfo_data->message)
     dbus_message_unref(addrinfo_data->message);
 
@@ -404,8 +424,7 @@ icd_dbus_api_statistics_ip_cb(const gpointer ip_stats_cb_token,
                                   ICD_DBUS_API_STATISTICS_SIG);
 
     if (msg &&
-        dbus_message_append_args(
-          msg,
+        dbus_message_append_args(msg,
           DBUS_TYPE_STRING, PVAL(iap->connection.service_type),
           DBUS_TYPE_UINT32, &iap->connection.service_attrs,
           DBUS_TYPE_STRING, PVAL(iap->connection.service_id),
@@ -1239,30 +1258,28 @@ static DBusObjectPathMessageFunction
 icd_dbus_api_find_handler(DBusMessage *message,
                           const struct icd_dbus_mcall_table *table)
 {
-  int i = 0;
+  int i;
   const char *iface = dbus_message_get_interface(message);
 
-  if (iface && !strcmp(iface, ICD_DBUS_API_INTERFACE))
+  if (iface == NULL || strcmp(iface, ICD_DBUS_API_INTERFACE))
+    return NULL;
+
+  for (i = 0; table[i].name; i++)
   {
-    while (table[i].name)
+    if (strcmp(dbus_message_get_member(message), table[i].name) ||
+        table[i].mcall_sig == NULL ||
+        !dbus_message_has_signature(message, table[i].mcall_sig))
     {
-      if (!strcmp(dbus_message_get_member(message), table[i].name))
-      {
-        if (table[i].mcall_sig &&
-            dbus_message_has_signature(message, table[i].mcall_sig))
-        {
-          if (table[i].handler_fn)
-          {
-            ILOG_INFO("Received %s.%s (%s) request", iface,
-                      dbus_message_get_member(message),
-                      dbus_message_get_signature(message));
+      continue;
+    }
 
-            return table[i].handler_fn;
-          }
-        }
-      }
+    if (table[i].handler_fn)
+    {
+      ILOG_INFO("Received %s.%s (%s) request", iface,
+                dbus_message_get_member(message),
+                dbus_message_get_signature(message));
 
-      i++;
+      return table[i].handler_fn;
     }
   }
 
@@ -1457,38 +1474,39 @@ icd_dbus_api_state_scan_send(const gchar *network_type,
 {
   gboolean sent = FALSE;
   const enum icd_connection_state state = ICD_STATE_SEARCH_START;
+  DBusMessage *msg;
 
-  if (network_type)
+  if (network_type == NULL)
+    return FALSE;
+
+  msg = dbus_message_new_signal(ICD_DBUS_API_PATH,
+                                ICD_DBUS_API_INTERFACE,
+                                ICD_DBUS_API_STATE_SIG);
+
+  if (!msg || !dbus_message_set_destination(msg, foreach_data->sender))
   {
-    DBusMessage *msg = dbus_message_new_signal(ICD_DBUS_API_PATH,
-                                               ICD_DBUS_API_INTERFACE,
-                                               ICD_DBUS_API_STATE_SIG);
+    ILOG_ERR("dbus api could not create scan state signal");
 
-    if (msg && dbus_message_set_destination(msg, foreach_data->sender))
-    {
-      if (dbus_message_append_args(msg,
-                                   DBUS_TYPE_STRING, &network_type,
-                                   DBUS_TYPE_UINT32, &state,
-                                   DBUS_TYPE_INVALID))
-      {
-        sent = icd_dbus_send_system_msg(msg);
+    if (msg)
+      dbus_message_unref(msg);
 
-        if (sent)
-          foreach_data->connections++;
-      }
-      else
-        ILOG_ERR("dbus api could not add attributes to scan state signal");
-    }
-    else
-    {
-      ILOG_ERR("dbus api could not create scan state signal");
-
-      if (!msg)
-        return FALSE;
-    }
-
-    dbus_message_unref(msg);
+    return FALSE;
   }
+
+  if (dbus_message_append_args(msg,
+                               DBUS_TYPE_STRING, &network_type,
+                               DBUS_TYPE_UINT32, &state,
+                               DBUS_TYPE_INVALID))
+  {
+    sent = icd_dbus_send_system_msg(msg);
+
+    if (sent)
+      foreach_data->connections++;
+  }
+  else
+    ILOG_ERR("dbus api could not add attributes to scan state signal");
+
+  dbus_message_unref(msg);
 
   return sent;
 }

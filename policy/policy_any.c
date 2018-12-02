@@ -12,43 +12,99 @@
 #define AUTO_CONNECT_KEY ICD_GCONF_NETWORK_MAPPING "/auto_connect"
 
 
+/** data for the any policy */
 struct policy_any_data
 {
+
+  /** function to add a new network */
   icd_policy_nw_add_fn add_network;
+
+  /** merge with an existing connection */
   icd_policy_request_merge_fn merge;
+
+  /** function to start scanning */
   icd_policy_scan_start_fn scan_start;
+
+  /** function to stop scanning */
   icd_policy_scan_stop_fn scan_stop;
+
+  /** the request that we scan for */
   struct icd_policy_request *request;
+
+  /** list of ongoing scans containing policy_scan_data structures */
   GSList *ongoing_scans;
+
+  /** List of network types to scan */
   GSList *scan_types_list;
+
+  /** minimum network priority desired */
   gint min_prio;
+
+  /** whether any iaps were added to the request */
   gboolean iaps_added;
+
+  /** list of found networks */
   GSList *found_networks;
+
+  /** function to check if there is a service module for a given network type */
   icd_policy_service_module_check_fn srv_check;
 };
 
 
+/** data for keeping track of the request we're scanning for */
 struct policy_scan_data
 {
+
+  /** the callback for this request */
   icd_policy_request_new_cb_fn policy_done_cb;
+
+  /** associated policy token */
   gpointer policy_token;
+
+  /** backpointer to the module data */
   struct policy_any_data *any_data;
 };
 
 
+/** data about a found network */
 struct policy_any_network
 {
+
+  /** service type */
   gchar *service_type;
+
+  /** service attributes */
   guint service_attrs;
+
+  /** service id */
   gchar *service_id;
+
+  /** network type */
   gchar *network_type;
+
+  /** network attributes */
   guint network_attrs;
+
+  /** network id */
   gchar *network_id;
+
+  /** network priority */
   gint network_priority;
+
+  /** signal level */
   enum icd_nw_levels signal;
 };
 
 
+/**
+ * Helper function for comparing two strings where a NULL string is equal to
+ * another NULL string
+ *
+ * @param a  string A
+ * @param b  string B
+ *
+ * @return   TRUE if equal, FALSE if unequal
+ */
 static gboolean
 policy_any_string_equal(const gchar *a, const gchar *b)
 {
@@ -61,6 +117,14 @@ policy_any_string_equal(const gchar *a, const gchar *b)
   return FALSE;
 }
 
+/**
+ * Sort new network according to priority and signal strength
+ *
+ * @param a  network A
+ * @param b  network B
+ *
+ * @return   < 0 if A comes before B, 0 on equality, > 0 if A comes after B
+ */
 static gint
 policy_any_sort_network(gconstpointer a, gconstpointer b)
 {
@@ -74,6 +138,27 @@ policy_any_sort_network(gconstpointer a, gconstpointer b)
   return rv;
 }
 
+/**
+ * Callback function for network scan.
+ *
+ * @param status            network scan status with ICD_POLICY_SCAN_* values
+ * @param service_name      service provider name, see srv_provider_api.h
+ * @param service_type      service provider type, see srv_provider_api.h
+ * @param service_attrs     service provider attributes, see
+ *                          srv_provider_api.h
+ * @param service_id        service_provider id, see srv_provider_api.h
+ * @param service_priority  service priority within a service_type
+ * @param network_name      network name, see network_api.h
+ * @param network_type      network type, see network_api.h
+ * @param network_attrs     network attributes, see network_api.h
+ * @param network_id        network id, see network_api.h
+ * @param network_priority  network priority between different network_type
+ * @param signal            signal level, see network_api.h
+ * @param user_data         user data passed to #icd_policy_scan_start_fn
+ *
+ * @todo  actually we should wait until all networks have completed one round
+ *        of scanning and only then remove all scan requests
+ */
 static void
 policy_any_scan_cb(const guint status, const gchar *service_name,
                    const gchar *service_type, const guint service_attrs,
@@ -207,6 +292,13 @@ new_net:
   }
 }
 
+/**
+ * Clean up internal policy module data structures for a request that has
+ * previously reported #ICD_POLICY_WAITING.
+ *
+ * @param request  the request that is to be removed or NULL for all
+ * @param private  private data for the module
+ */
 static void
 policy_any_cancel_request(struct icd_policy_request *request,
                           gpointer *private)
@@ -253,6 +345,12 @@ policy_any_cancel_request(struct icd_policy_request *request,
   }
 }
 
+/**
+ * Policy module destruction function. Will be called before unloading the
+ * module.
+ *
+ * @param private  a reference to the private data
+ */
 static void
 policy_any_destruct(gpointer *private)
 {
@@ -261,6 +359,15 @@ policy_any_destruct(gpointer *private)
   *private = NULL;
 }
 
+/**
+ * Get the highest priority in the existing requests if change while
+ * connected is on
+ *
+ * @param existing_requests  existing requests
+ *
+ * @return                   the highest priority found or -1 if change while
+ *                           connected not set
+ */
 static gint
 policy_any_get_prio(const GSList *existing_requests)
 {
@@ -286,6 +393,16 @@ policy_any_get_prio(const GSList *existing_requests)
   return rv;
 }
 
+/**
+ * Create a new scan data structure and add it to the list of ongoing scans.
+ *
+ * @param any_data        module data
+ * @param new_request     the new connection request
+ * @param policy_done_cb  callback to call when policy has been decided
+ * @param policy_token    policy token
+ *
+ * @return  scan data structure
+ */
 static struct policy_scan_data*
 policy_any_scan_data_new(struct policy_any_data *any_data,
                          struct icd_policy_request *new_request,
@@ -301,6 +418,10 @@ policy_any_scan_data_new(struct policy_any_data *any_data,
   return scan_data;
 }
 
+/**
+ * Get a list of network types to scan
+ * @return  list of network types that caller needs to free
+ */
 static GSList*
 policy_any_get_types(struct policy_any_data *data)
 {
@@ -472,6 +593,18 @@ policy_any_get_types(struct policy_any_data *data)
   return scan_types_list;
 }
 
+/**
+ * New connection request policy function.
+ *
+ * @param new_request        the new connection request
+ * @param existing_requests  currently existing requests
+ * @param policy_done_cb     callback to call when policy has been decided
+ * @param policy_token       token to pass to the callback
+ * @param private            the private member of the icd_request_api
+ *                           structure
+ *
+ * @todo  here we should make a new ASK request and merge with that
+ */
 static void
 policy_any_new_request(struct icd_policy_request *new_request,
                        const GSList *existing_requests,
@@ -544,6 +677,16 @@ policy_any_new_request(struct icd_policy_request *new_request,
   }
 }
 
+/**
+ * Policy module initialization function.
+ *
+ * @param policy_api      policy API structure to be filled in by the module
+ * @param add_network     function to add a network in response to a policy
+ * @param merge_requests  function to merge requests
+ * @param make_request    function for creating a new request
+ * @param scan_start      function for scanning networks
+ * @param scan_stop       function for stopping network scanning
+ */
 void
 icd_policy_init(struct icd_policy_api *policy_api,
                 icd_policy_nw_add_fn add_network,

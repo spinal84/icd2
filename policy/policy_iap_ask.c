@@ -9,19 +9,40 @@
 #include "icd_log.h"
 
 
+/** Milliseconds to wait for UI to reply */
 #define POLICY_IAP_ASK_TIMEOUT 10 * 1000
 
 
+/** Private data for the module */
 struct policy_iap_ask_data
 {
+
+  /** backpointer to the module private data */
   gpointer *private;
+
+  /** the pending call requesting 'Select connection' dialog from UI */
   DBusPendingCall *pending_call;
+
+  /** the request */
   struct icd_policy_request *request;
+
+  /** policy callback */
   icd_policy_request_new_cb_fn policy_done_cb;
+
+  /** policy callback token */
   gpointer policy_token;
 };
 
 
+/**
+ * Helper function for comparing two strings where a NULL string is equal to
+ * another NULL string
+ *
+ * @param a  string A
+ * @param b  string B
+ *
+ * @return   TRUE if equal, FALSE if unequal
+ */
 static gboolean
 string_equal(const gchar *a, const gchar *b)
 {
@@ -34,6 +55,11 @@ string_equal(const gchar *a, const gchar *b)
   return FALSE;
 }
 
+/**
+ * Callback function for the 'Exit flight mode' UI pending call reply.
+ * @param pending    the pending call
+ * @param user_data  data for the pending call
+ */
 static void
 policy_iap_ask_flightmode_pending(DBusPendingCall *pending, void *user_data)
 {
@@ -59,6 +85,10 @@ policy_iap_ask_flightmode_pending(DBusPendingCall *pending, void *user_data)
   g_free(data);
 }
 
+/**
+ * Request whether flight mode is to be cancelled
+ * @param data  policy module data
+ */
 static void
 policy_iap_ask_flightmode(struct policy_iap_ask_data *data)
 {
@@ -98,6 +128,11 @@ policy_iap_ask_flightmode(struct policy_iap_ask_data *data)
   g_free(data);
 }
 
+/**
+ * Callback function for the 'Select connection' UI pending call reply.
+ * @param pending    the pending call
+ * @param user_data  data for the pending call
+ */
 static void
 policy_iap_ask_pending(DBusPendingCall *pending, void *user_data)
 {
@@ -134,6 +169,16 @@ policy_iap_ask_pending(DBusPendingCall *pending, void *user_data)
   g_free(data);
 }
 
+/**
+ * Request UI to show 'Select connection' dialog
+ *
+ * @param new_request        the new connection request
+ * @param existing_requests  currently existing requests
+ * @param policy_done_cb     callback to call when policy has been decided
+ * @param policy_token       token to pass to the callback
+ * @param private            the private member of the icd_request_api
+ *                           structure; GSList
+ */
 static void
 policy_iap_ask_request(struct icd_policy_request *new_request,
                        const GSList *existing_requests,
@@ -201,6 +246,11 @@ reject:
   policy_done_cb(ICD_POLICY_REJECTED, new_request, policy_token);
 }
 
+/**
+ * Cancel a pending call for ICD_UI_SHOW_CONNDLG_REQ
+ * @param request  the request to cancel
+ * @param private  GSList of pending calls
+ */
 static void
 policy_iap_ask_cancel_request(struct icd_policy_request *request,
                               gpointer *private)
@@ -234,6 +284,13 @@ policy_iap_ask_cancel_request(struct icd_policy_request *request,
   }
 }
 
+/**
+ * Policy module initialization function.
+ *
+ * @param policy_api      policy API structure to be filled in by the module
+ * @param add_network     function to add a network in response to a policy
+ * @param merge_requests  function to merge requests
+ */
 void
 icd_policy_init(struct icd_policy_api *policy_api,
                 icd_policy_nw_add_fn add_network,

@@ -1,3 +1,14 @@
+/**
+@file icd_tracking_info.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_tracking_info Tracking of D-Bus users for a request
+
+@ingroup internal
+
+ * @{ */
+
 #include <string.h>
 #include "icd_tracking_info.h"
 #include "icd_log.h"
@@ -135,3 +146,5 @@ struct icd_tracking_info *
 
   return track;
 }
+
+/** @} */

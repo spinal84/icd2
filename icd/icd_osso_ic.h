@@ -1,6 +1,17 @@
 #ifndef ICD_OSSO_IC_H
 #define ICD_OSSO_IC_H
 
+/**
+@file icd_osso_ic.h
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_osso_ic Compatibility functions providing OSSO IC D-Bus API
+
+@ingroup internal
+
+ * @{ */
+
 #include <glib.h>
 #include "icd_context.h"
 
@@ -22,5 +33,7 @@ gpointer icd_osso_ui_send_save (const gchar *iap_name,
                                 gpointer user_data);
 gboolean icd_osso_ic_init (struct icd_context *icd_ctx);
 void icd_osso_ic_deinit (void);
+
+/** @} */
 
 #endif

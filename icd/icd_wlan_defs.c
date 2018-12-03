@@ -1,3 +1,14 @@
+/**
+@file icd_wlan_defs.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_wlan_defs Defines for WLAN attribute bits
+
+@ingroup internal
+
+ * @{ */
+
 #include <string.h>
 #include "icd_wlan_defs.h"
 #include "icd_gconf.h"
@@ -45,3 +56,5 @@ icd_wlan_defs_is_wlan(const gchar *network_type)
 
   return FALSE;
 }
+
+/** @} */

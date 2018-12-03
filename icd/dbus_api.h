@@ -46,7 +46,8 @@ extern "C" {
 
 This is an internal API and considered alpha quality. It may change without
 further notice.
-@{ */
+
+ * @{ */
 
 /** D-Bus API interface */
 #define ICD_DBUS_API_INTERFACE   "com.nokia.icd2"

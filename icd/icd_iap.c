@@ -1,3 +1,14 @@
+/**
+@file icd_iap.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_iap IAP connection abstraction
+
+@ingroup internal
+
+ * @{ */
+
 #include <sys/types.h>
 #include <unistd.h>
 #include <glib.h>
@@ -2389,3 +2400,5 @@ icd_iap_id_create(struct icd_iap *iap, const gchar *new_name)
 
   return FALSE;
 }
+
+/** @} */

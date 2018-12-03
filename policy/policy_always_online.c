@@ -1,3 +1,14 @@
+/**
+@file policy_always_online.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup policy_always_online Always online policy
+
+@ingroup policy
+
+ * @{ */
+
 #include <gconf/gconf-client.h>
 #include <osso-ic-gconf.h>
 #include <osso-ic.h>
@@ -737,3 +748,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
   policy_api->destruct = policy_always_online_destruct;
   policy_api->priority = priority;
 }
+
+/** @} */

@@ -1,3 +1,14 @@
+/**
+@file icd_signal.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_signal Signal handling integration with glib main loop
+
+@ingroup internal
+
+ * @{ */
+
 #include <glib.h>
 #include <stdarg.h>
 #include <sys/types.h>
@@ -115,3 +126,5 @@ out:
   va_end(ap);
   return status;
 }
+
+/** @} */

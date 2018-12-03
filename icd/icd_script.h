@@ -1,6 +1,17 @@
 #ifndef ICD_SCRIPT_H
 #define ICD_SCRIPT_H
 
+/**
+@file icd_script.h
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_script Network script support
+
+@ingroup internal
+
+ * @{ */
+
 #include <sys/types.h>
 #include <unistd.h>
 #include <glib.h>
@@ -50,5 +61,7 @@ pid_t icd_script_post_down (const gchar *iface,
                             gpointer user_data);
 
 void icd_script_add_env_vars (struct icd_iap *iap, gchar **env_vars);
+
+/** @} */
 
 #endif

@@ -1,3 +1,14 @@
+/**
+@file icd_args.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_args Command line argument parsing
+
+@ingroup internal
+
+ * @{ */
+
 #include <unistd.h>
 #include <getopt.h>
 #include <stdio.h>
@@ -79,3 +90,5 @@ icd_args_decode(int argc, char *argv[], struct icd_context *context)
 
   return optind;
 }
+
+/** @} */

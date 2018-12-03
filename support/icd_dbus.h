@@ -1,6 +1,17 @@
 #ifndef ICD_DBUS_H
 #define ICD_DBUS_H
 
+/**
+@file icd_dbus.h
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_dbus D-Bus helper functions
+
+@ingroup support_libraries
+
+ * @{ */
+
 #include <glib.h>
 
 #include <dbus/dbus.h>
@@ -91,5 +102,7 @@ gboolean icd_dbus_get_unique_name (const gchar *name,
                                    gpointer user_data);
 
 void icd_dbus_close (void);
+
+/** @} */
 
 #endif

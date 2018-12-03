@@ -1,3 +1,14 @@
+/**
+@file icd_request.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_request Connection request
+
+@ingroup internal
+
+ * @{ */
+
 #include <string.h>
 #include <osso-ic.h>
 #include <osso-ic-dbus.h>
@@ -1062,3 +1073,5 @@ skip:
 
   return TRUE;
 }
+
+/** @} */

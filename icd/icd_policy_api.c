@@ -1,3 +1,14 @@
+/**
+@file icd_policy_api.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_policy_api ICd policy API implementation
+
+@ingroup internal
+
+ * @{ */
+
 #include <gconf/gconf.h>
 #include "icd_policy_api.h"
 #include "policy_api.h"
@@ -986,3 +997,5 @@ icd_policy_api_unload_modules(struct icd_context *icd_ctx)
     l = next;
   }
 }
+
+/** @} */

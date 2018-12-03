@@ -1,3 +1,14 @@
+/**
+@file policy_change.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup policy_change Change to another connection
+
+@ingroup policy
+
+ * @{ */
+
 #include <osso-ic-dbus.h>
 #include <osso-ic-ui-dbus.h>
 #include <osso-ic.h>
@@ -331,3 +342,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
                                        policy_change_done, data,
                                        POLICY_CHANGE_EXTRA_FILTER);
 }
+
+/** @} */

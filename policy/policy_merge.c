@@ -1,3 +1,14 @@
+/**
+@file policy_merge.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup policy_merge Merge a new request with an already existing one
+
+@ingroup policy
+
+ * @{ */
+
 #include <osso-ic.h>
 
 #include <string.h>
@@ -121,3 +132,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
   policy_api->private = merge_requests;
   policy_api->new_request = policy_merge_request;
 }
+
+/** @} */

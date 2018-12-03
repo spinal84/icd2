@@ -49,87 +49,77 @@ extern "C" {
 
 The network module API is considered stable.
 
-A network in ICd is abstracted by a shared library implementing the
-network module API. A network module consists of three functionally
-different parts, one for searching for networks of the supported types,
-another for connecting and disconnecting and the third one for providing
-information about the connected network.
-<p>
-Each module must implement the  @ref icd_nw_init_fn() function, and the
-network module library package must create special settings in GConf in
-order to be loaded by ICd2. The settings define a unique network type
-string that will be used to look up modules needed when connecting
-networks with a particular type.
+A network in ICd is abstracted by a shared library implementing the network
+module API. A network module consists of three functionally different parts,
+one for searching for networks of the supported types, another for connecting
+and disconnecting and the third one for providing information about the
+connected network.
+
+Each module must implement the icd_nw_init_fn() function, and the network
+module library package must create special settings in GConf in order to be
+loaded by ICd2. The settings define a unique network type string that will be
+used to look up modules needed when connecting networks with a particular
+type.
 
 A network type is defined by the following entries in the gconf path
-<code>/system/osso/connectivity/network_type/</code><i>&lt;network type
-name&gt;</i>
-<ul>
-<li><code>network_modules</code> A list of strings where each string
-contains the name of a shared network module library to load. The modules
-are run in the order specified when connecting.
-<li><code>idle_timeout</code> Optional network idle timeout in seconds for
-this network type.
-</ul>
+\c /system/osso/connectivity/network_type/<em><network type name></em>
 
-The module initialization function is fed an @ref icd_nw_api structure,
-which the module needs to fill in with the functions it intends to
-support. A network module consists of three layers:
-<ul>
-<li> link layer with icd_nw_link_up_fn() and icd_nw_link_down_fn()
-functions 
-<li> post-link or link authentication layer with
-icd_nw_link_post_up_fn() and icd_nw_link_pre_down_fn() functions 
-<li> IP layer with icd_nw_ip_up_fn() and icd_nw_ip_down_fn() functions
-</ul>
-Each of the layers consist of <code>*_up_fn()</code> and
-<code>*_down_fn()</code> functions. In order to support the specified
-layer, an <code>*_up_fn()</code> function needs to be provided while a
-<code>*_down_fn()</code> function is optional. A module may choose to
+- \c network_modules A list of strings where each string contains the name of
+  a shared network module library to load. The modules are run in the order
+  specified when connecting.
+- \c idle_timeout Optional network idle timeout in seconds for this network
+  type.
+
+The module initialization function is fed an icd_nw_api structure, which the
+module needs to fill in with the functions it intends to support. A network
+module consists of three layers:
+
+- link layer with icd_nw_link_up_fn() and icd_nw_link_down_fn() functions
+- post-link or link authentication layer with icd_nw_link_post_up_fn() and
+  icd_nw_link_pre_down_fn() functions
+- IP layer with icd_nw_ip_up_fn() and icd_nw_ip_down_fn() functions
+
+Each of the layers consist of \c *_up_fn() and \c *_down_fn() functions. In
+order to support the specified layer, an \c *_up_fn() function needs to be
+provided while a \c *_down_fn() function is optional. A module may choose to
 implement one or more of the network module layers.
-<p>
-When a network is being established, the specified modules will be run in the
-order defined in GConf. Thus when connecting to a network, the link
-layer functions icd_nw_link_up_fn() will be run one by one in the
-specified order for each network module, and the next module will be
-run only after the previous one has called
-icd_nw_link_up_cb_fn(). When all link layer module icd_nw_link_up_fn()
-functions have been successfully run, the post-link layer
-icd_nw_link_post_up_fn() functions will be run in the same
-order for each network module. Again ICd waits for the
-icd_nw_link_post_up_cb_fn() to be called before continuing. When all
-modules with a icd_nw_link_post_up_fn() have been called, the
-procedure is repeated for the IP layer. If an error condition or other
-unfavorable network event happens while the module tries to connect,
-the module will indicate this with a suitable @ref icd_nw_status code
-in the callback function. When a callback function returns an error, ICd2
-will start disconnecting the network connection, calling the <code>
-*_down_fn()</code> functions in reverse order.
 
-<p>
-When the network module has been successfully connected but notices
-that the network connection it implements has been closed, e.g. due to
-connection loss, it must use icd_nw_close_fn() to inform ICd about the
-event. A network module must use the close function if it has already called
-the given <code>*_cb_fn()</code> and not call the callback function
-more than once.
-<p>
-ICd can request disconnection of a network at any time, either due to
-a network module calling icd_nw_close_fn(), a network callback
-returning error or a disconnection forced by a timer or requested by
-the user. When a disconnection takes place, network module
-<code>*_down()</code> functions are called in reverse order than their
-<code>*_up()</code> counterparts.  A network module needs to be
-prepared that a disconnect can happen before a network module has
-called the respective <code>*_up_cb_fn()</code> callback, i.e. ICd
-will not wait for the callback to be called before starting the
-network module disconnection. When the disconnect procedure is
-completed, the network module calls the given
-<code>*_down_cb_fn()</code> function, whereby ICd continues with the
-next <code>*_down_fn()</code> function.
-<p>
-Network scanning is started with the icd_nw_start_search_fn() function.
-The start function will be called again if the search scope changes from
+When a network is being established, the specified modules will be run in the
+order defined in GConf. Thus when connecting to a network, the link layer
+functions icd_nw_link_up_fn() will be run one by one in the specified order
+for each network module, and the next module will be run only after the
+previous one has called icd_nw_link_up_cb_fn(). When all link layer module
+icd_nw_link_up_fn() functions have been successfully run, the post-link layer
+icd_nw_link_post_up_fn() functions will be run in the same order for each
+network module. Again ICd waits for the icd_nw_link_post_up_cb_fn() to be
+called before continuing. When all modules with a icd_nw_link_post_up_fn()
+have been called, the procedure is repeated for the IP layer. If an error
+condition or other unfavorable network event happens while the module tries
+to connect, the module will indicate this with a suitable #icd_nw_status code
+in the callback function. When a callback function returns an error, ICd2
+will start disconnecting the network connection, calling the \c _down_fn()
+functions in reverse order.
+
+When the network module has been successfully connected but notices that the
+network connection it implements has been closed, e.g. due to connection
+loss, it must use icd_nw_close_fn() to inform ICd about the event. A network
+module must use the close function if it has already called the given \c
+*_cb_fn() and not call the callback function more than once.
+
+ICd can request disconnection of a network at any time, either due to a
+network module calling icd_nw_close_fn(), a network callback returning error
+or a disconnection forced by a timer or requested by the user. When a
+disconnection takes place, network module \c *_down() functions are called in
+reverse order than their \c *_up() counterparts. A network module needs to be
+prepared that a disconnect can happen before a network module has called the
+respective \c *_up_cb_fn() callback, i.e. ICd will not wait for the callback
+to be called before starting the network module disconnection. When the
+disconnect procedure is completed, the network module calls the given \c
+*_down_cb_fn() function, whereby ICd continues with the next \c *_down_fn()
+function.
+
+Network scanning is started with the icd_nw_start_search_fn() function. The
+start function will be called again if the search scope changes from
 #ICD_NW_SEARCH_SCOPE_SAVED to #ICD_NW_SEARCH_SCOPE_ALL. Scan results are
 passed to ICd2 with the icd_nw_search_cb_fn() callback function. When the
 network search is completed the module must call the callback with the
@@ -138,33 +128,35 @@ any scanned networks by setting the #ICD_NW_SEARCH_EXPIRE status code and
 filling in the network type, attributes and id for the expired network.
 Expiring a network can happen at any time, also after the network scan has
 ended. Scanning should be stopped when icd_nw_stop_search_fn() is called.
-After scan has ended or stopped, no more scan results are accepted except
-for expiring entries. ICd2 will automatically expire entries after the time
-given in the search_lifetime element of the @ref icd_nw_api structure.
-<p>
-A network module may implement optional statistics functions. When a statistics
-request is received, network status is queried from the link layer from every
-module implementing icd_nw_link_stats_fn(), then for the link post layer from
-every module implementing icd_nw_link_post_stats_fn() and finally from every
-icd_nw_ip_stats_fn() function. The values from upper layers take precedence
-over the values supplied by lower layers with the signal, station id and dB
-values being unique statistics for the link layer. The IP layer can optionally
-support IP status information by implmenting the icd_nw_ip_addr_info_fn()
-function.
-<p>
+After scan has ended or stopped, no more scan results are accepted except for
+expiring entries. ICd2 will automatically expire entries after the time given
+in the search_lifetime element of the icd_nw_api structure.
+
+A network module may implement optional statistics functions. When a
+statistics request is received, network status is queried from the link layer
+from every module implementing icd_nw_link_stats_fn(), then for the link post
+layer from every module implementing icd_nw_link_post_stats_fn() and finally
+from every icd_nw_ip_stats_fn() function. The values from upper layers take
+precedence over the values supplied by lower layers with the signal, station
+id and dB values being unique statistics for the link layer. The IP layer can
+optionally support IP status information by implementing the
+icd_nw_ip_addr_info_fn() function.
+
 Any network module can ask a renewal of an network layer with the
 icd_nw_renew_fn() function. Usually the renewal is due to some specialized
 network condition in some special network case; network modules have no need
 to normally call the renew function. If a renew is requested for a specific
-\ref icd_nw_layer network module layer, the corresponding renew functions
-icd_nw_api::link_renew, icd_nw_api::link_post_renew, icd_nw_api::ip_renew
-are called for each module that have the corresponding <code>*_up()</code>
-function. If the network renewal is successful and no side effects will be
-noticable by any other network module, the renew callback function shall
-return #ICD_NW_RENEW_NO_CHANGES. If there are network changes affecting
-other parts of the network stack, #ICD_NW_RENEW_CHANGES_MADE must be reported.
-A module layer without renew functions receiving a renew request will cause
-the IAP to be restarted.
+#icd_nw_layer network module layer, the corresponding renew functions
+#icd_nw_api::link_renew, #icd_nw_api::link_post_renew, #icd_nw_api::ip_renew
+are called for each module that have the corresponding \c *_up() function. If
+the network renewal is successful and no side effects will be noticable by
+any other network module, the renew callback function shall return
+#ICD_NW_RENEW_NO_CHANGES. If there are network changes affecting other parts
+of the network stack, #ICD_NW_RENEW_CHANGES_MADE must be reported. A module
+layer without renew functions receiving a renew request will cause the IAP to
+be restarted.
+
+This file contains general network API definitions.
 
  * @{ */
 

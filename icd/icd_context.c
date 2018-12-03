@@ -1,3 +1,14 @@
+/**
+@file icd_context.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_context ICd context
+
+@ingroup internal
+
+ * @{ */
+
 #include "icd_context.h"
 
 /** the global ICd context */
@@ -52,3 +63,5 @@ void
 icd_context_destroy(void)
 {
 }
+
+/** @} */

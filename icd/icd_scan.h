@@ -1,6 +1,39 @@
 #ifndef ICD_SCAN_H
 #define ICD_SCAN_H
 
+/**
+@file icd_scan.h
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_scan Network scan and scan result handling
+
+Internally each module has a hash table of cached scan results. The hash
+table is accessed using the module internal network_id. Each hash table entry
+contains an icd_scan_cache_list structure with a singly linked list of
+networks. The icd_scan_cache_list structure is used because the pointer to
+the singly linked list must be updated whenever a network is removed.
+<pre>
+ +---+
+ | n |   +GHashTable(network_idX)-+
+ | w |-->|scan_cache_table        |
+ |   |   +------------------------+
+ | m |                     |  |  +->icd_scan_cache_list
+ | o |                     |  |       +->GSlist for network_idN
+ | d |                     |  |
+ | u |                     |  +->icd_scan_cache_list
+ | l |                     |       +->GSList for network_id2
+ | e |                     |
+ +---+                     |   ...
+                           |
+                           +->icd_scan_cache_list
+                                +->GSList for network_idN
+ </pre>
+
+@ingroup internal
+
+ * @{ */
+
 #include <glib.h>
 
 #include "network_api.h"
@@ -126,5 +159,7 @@ gboolean icd_scan_cache_init (struct icd_network_module *module);
 void icd_scan_cache_remove (struct icd_network_module *module);
 
 void icd_scan_cache_remove_iap(gchar *iap_name);
+
+/** @} */
 
 #endif

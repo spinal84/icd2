@@ -1,3 +1,14 @@
+/**
+@file policy_any.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup policy_any Any connection policy
+
+@ingroup policy
+
+ * @{ */
+
 #include <gconf/gconf-client.h>
 #include <osso-ic-gconf.h>
 #include <osso-ic.h>
@@ -711,3 +722,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
   policy_api->destruct = policy_any_destruct;
   policy_api->private = data;
 }
+
+/** @} */

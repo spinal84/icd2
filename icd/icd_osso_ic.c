@@ -1,3 +1,14 @@
+/**
+@file icd_osso_ic.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_osso_ic Compatibility functions providing OSSO IC D-Bus API
+
+@ingroup internal
+
+ * @{ */
+
 #include <string.h>
 #include <dbus/dbus.h>
 #include <gconf/gconf.h>
@@ -1756,3 +1767,5 @@ icd_osso_ui_send_save(const gchar *iap_name, icd_osso_ui_cb_fn cb,
 
   return NULL;
 }
+
+/** @} */

@@ -1,6 +1,17 @@
 #ifndef ICD_PLUGIN_H
 #define ICD_PLUGIN_H
 
+/**
+@file icd_plugin.h
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_plugin Support functions for loadable plugins
+
+@ingroup internal
+
+ * @{ */
+
 #include <glib.h>
 
 /**
@@ -37,5 +48,7 @@ gboolean icd_plugin_load_list (const char *plugindir,
                                gpointer cb_data);
 
 void icd_plugin_unload_module (void *handle);
+
+/** @} */
 
 #endif

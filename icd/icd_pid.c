@@ -1,3 +1,14 @@
+/**
+@file icd_pid.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_pid Pid handling
+
+@ingroup internal
+
+ * @{ */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -94,3 +105,5 @@ icd_pid_check(const char *pidfile)
 
   return pid;
 }
+
+/** @} */

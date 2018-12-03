@@ -1,3 +1,14 @@
+/**
+@file icd_gconf.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_gconf Compatibility functions for gconf settings
+
+@ingroup internal
+
+ * @{ */
+
 #include <string.h>
 #include <gconf/gconf-client.h>
 #include <osso-ic-gconf.h>
@@ -295,3 +306,5 @@ icd_gconf_del_notify(void)
   icd_ctx->iap_deletion_notify = 0;
   g_object_unref(gconf);
 }
+
+/** @} */

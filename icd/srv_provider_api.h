@@ -42,30 +42,27 @@ The service provider API is considered beta quality, it may still be modified
 at some point.
 
 The service provider API makes it possible to run tasks after an IP address
-has been acquired in the network module ip layer but before the network
-is announced to applications as being connected. The settings for a service
+has been acquired in the network module ip layer but before the network is
+announced to applications as being connected. The settings for a service
 module include the network types the service module is interested in, whereby
 the icd_srv_identify_fn() is called whenever there is a scan result available
-with a matching network type. In this way e.g. hotspot WLAN networks can
-be supported, since they need IP layer connectivity in order to reach an
+with a matching network type. In this way e.g. hotspot WLAN networks can be
+supported, since they need IP layer connectivity in order to reach an
 authentication service that usually means posting credentials on a web page.
-<p>
+
 In order for the network connection with an associated service module to
 succeed, icd_srv_connect_cb_fn() needs to be called with an #ICD_SRV_SUCCESS
 status code. On error conditions or when closing the network connection the
 optional icd_srv_disconnect_fn() function is called, whereafter the network
 is disconnected as described in @ref network_module_api.
-<p>
+
 The following service module settings are located at the gconf path
-<code>/system/osso/connectivity/srv_provider/</code><i>&lt;service type
-name&gt;</i>:
-<ul>
-<li><code>module</code> Name of the shared service provider module that
-implements this service.
-<li><code>network_type</code> A list of strings where each string
-contains the name of the network types this service is interested in.
-</ul>
-<p>
+\c /system/osso/connectivity/srv_provider/<em><service type name></em>:
+
+- \c module Name of the shared service provider module that implements this
+  service.
+- \c network_type A list of strings where each string contains the name of
+  the network types this service is interested in.
 
  * @{ */
 

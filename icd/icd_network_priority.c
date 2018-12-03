@@ -1,3 +1,14 @@
+/**
+@file icd_network_priority.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_network_prio Network priority assignment
+
+@ingroup internal
+
+ * @{ */
+
 #include <string.h>
 #include <gconf/gconf-client.h>
 #include <osso-ic-gconf.h>
@@ -174,3 +185,5 @@ icd_network_priority(const gchar *srv_type, const gchar *srv_id,
 
   return priority < ICD_NW_PRIO_WLAN;
 }
+
+/** @} */

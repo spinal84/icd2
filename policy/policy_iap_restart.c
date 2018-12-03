@@ -1,3 +1,14 @@
+/**
+@file policy_iap_restart.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup policy_iap_restart IAP restart policy
+
+@ingroup policy
+
+ * @{ */
+
 #include <gconf/gconf-client.h>
 #include <osso-ic-gconf.h>
 
@@ -102,3 +113,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
 {
   policy_api->restart = policy_iap_restart;
 }
+
+/** @} */

@@ -1,3 +1,14 @@
+/**
+@file policy_one.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup policy_one One connection only
+
+@ingroup policy
+
+ * @{ */
+
 #include "policy_api.h"
 #include "icd_log.h"
 
@@ -55,3 +66,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
   policy_api->private = nw_close;
   policy_api->connected = policy_one_connected;
 }
+
+/** @} */

@@ -1,3 +1,14 @@
+/**
+@file icd_log.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup icd_log Logging functions
+
+@ingroup support_libraries
+
+ * @{ */
+
 #include "icd_log.h"
 
 /** the global log level */
@@ -60,3 +71,5 @@ icd_log_nextlevel(void)
 
   syslog(30, "Log level set to %d", loglevel);
 }
+
+/** @} */

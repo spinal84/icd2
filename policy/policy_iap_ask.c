@@ -1,3 +1,14 @@
+/**
+@file policy_iap_ask.c
+
+@copyright GNU GPLv2 or later
+
+@addtogroup policy_iap_ask Request 'Select connection' dialog from UI
+
+@ingroup policy
+
+ * @{ */
+
 #include <osso-ic-dbus.h>
 #include <osso-ic-ui-dbus.h>
 #include <osso-ic.h>
@@ -305,3 +316,5 @@ icd_policy_init(struct icd_policy_api *policy_api,
   policy_api->new_request = policy_iap_ask_request;
   policy_api->cancel_request = policy_iap_ask_cancel_request;
 }
+
+/** @} */

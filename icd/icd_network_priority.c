@@ -1,10 +1,8 @@
 /**
 @file icd_network_priority.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_network_prio Network priority assignment
-
 @ingroup internal
 
  * @{ */

@@ -1,10 +1,8 @@
 /**
 @file icd_gconf.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_gconf Compatibility functions for gconf settings
-
 @ingroup internal
 
  * @{ */

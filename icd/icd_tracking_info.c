@@ -1,10 +1,8 @@
 /**
 @file icd_tracking_info.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_tracking_info Tracking of D-Bus users for a request
-
 @ingroup internal
 
  * @{ */

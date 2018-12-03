@@ -3,7 +3,6 @@
 
 /**
 @file policy_api.h
-
 @copyright GNU GPLv2 or later
 
 @addtogroup policy_api ICd policy API
@@ -14,43 +13,28 @@
 
 #include "network_api.h"
 
-/** Status of the policy check */
-enum icd_policy_status {
 
-  /** Accepted, next module to verify policy */
-  ICD_POLICY_ACCEPTED = 0,
-
-  /** Request is merged with an existing one, stops policy processing */
-  ICD_POLICY_MERGED,
-
-  /** Request is waiting for external action, stops policy processing */
-  ICD_POLICY_WAITING,
-
-  /** Rejected by policy module */
-  ICD_POLICY_REJECTED
-};
-
-/** set if request is a response from UI */
+/** Set if request is a response from UI */
 #define ICD_POLICY_ATTRIBUTE_CONN_UI            0x01
 
-/** set if an application generated the request by itself */
+/** Set if an application generated the request by itself */
 #define ICD_POLICY_ATTRIBUTE_BACKGROUND         0x02
 
-/** set if a previous attempt for a request to connect networks failed; used
+/** Set if a previous attempt for a request to connect networks failed; used
  * by policy_iap_ask_request() */
 #define ICD_POLICY_ATTRIBUTE_CONNECTIONS_FAILED 0x04
 
-/** set whenever any IAPs are added to the request */
+/** Set whenever any IAPs are added to the request */
 #define ICD_POLICY_ATTRIBUTE_HAS_CONNECTIONS    0x08
 
-/** set if no user interaction may take place */
+/** Set if no user interaction may take place */
 #define ICD_POLICY_ATTRIBUTE_NO_INTERACTION     0x10
 
-/** set if always online policy has made the request and the request is
+/** Set if always online policy has made the request and the request is
  * allowed to change IAP */
 #define ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE_CHANGE 0x20
 
-/** set if always online policy has made the request */
+/** Set if always online policy has made the request */
 #define ICD_POLICY_ATTRIBUTE_ALWAYS_ONLINE      0x40
 
 /** The requested (pseudo)network that is to be decided on by the policy
@@ -58,25 +42,20 @@ enum icd_policy_status {
 struct icd_policy_request {
   /** internal information */
   gpointer request_token;
-
   /** attributes for this request */
   guint attrs;
 
   /** service provider type */
   gchar *service_type;
-
   /** service provider attributes */
   guint service_attrs;
-
   /** service provider id */
   gchar *service_id;
 
   /** (pseudo)network type */
   gchar *network_type;
-
   /** (pseudo)network attributes */
   guint network_attrs;
-
   /** (pseudo)network id */
   gchar *network_id;
 
@@ -85,21 +64,30 @@ struct icd_policy_request {
 };
 
 
+/** Status of the policy check */
+enum icd_policy_status {
+  /** Accepted, next module to verify policy */
+  ICD_POLICY_ACCEPTED = 0,
+  /** Request is merged with an existing one, stops policy processing */
+  ICD_POLICY_MERGED,
+  /** Request is waiting for external action, stops policy processing */
+  ICD_POLICY_WAITING,
+  /** Rejected by policy module */
+  ICD_POLICY_REJECTED
+};
+
 /** Network scan status */
 enum icd_policy_scan_status {
-
   /** A new network was found */
   ICD_POLICY_SCAN_NEW_NETWORK = 0,
-
   /** The signal strenght of the network was updated */
   ICD_POLICY_SCAN_UPDATE_NETWORK,
-
   /** The network is no longer found */
   ICD_POLICY_SCAN_EXPIRED_NETWORK,
-
   /** Scanning done for this scan request */
   ICD_POLICY_SCAN_DONE
 };
+
 
 /**
  * Result of the policy decision
@@ -228,16 +216,18 @@ typedef void
  * @param network_type  network type
  * @param private       private data for the module
  */
-typedef void (*icd_policy_nw_scan_stop_fn) (const gchar *network_type,
-                                            gpointer *private);
+typedef void
+(*icd_policy_nw_scan_stop_fn) (const gchar *network_type,
+                               gpointer *private);
 
 /**
  * Informationa policy called when a scan is started for a network type
  * @param network_type  network type
  * @param private       private data for the module
  */
-typedef void (*icd_policy_nw_scan_start_fn) (const gchar *network_type,
-                                             gpointer *private);
+typedef void
+(*icd_policy_nw_scan_start_fn) (const gchar *network_type,
+                                gpointer *private);
 
 /**
  * Policy module destruction function. Will be called before unloading the
@@ -260,11 +250,46 @@ typedef void (*icd_policy_destruct_fn) (gpointer *private);
  *          is, FALSE = no there is not)
  */
 typedef gboolean
-(*icd_policy_network_priority_fn)(const gchar *srv_type,
-                                  const gchar *srv_id,
-                                  const gchar *network_type,
-                                  const guint network_attrs,
-                                  gint *network_priority);
+(*icd_policy_network_priority_fn) (const gchar *srv_type,
+                                   const gchar *srv_id,
+                                   const gchar *network_type,
+                                   const guint network_attrs,
+                                   gint *network_priority);
+
+
+/** The policy module API to be filled in by the module */
+struct icd_policy_api {
+  /** private data for the module */
+  gpointer private;
+
+  /** request for a new connection */
+  icd_policy_request_new_fn new_request;
+  /** cancelling a waiting policy request */
+  icd_policy_request_cancel_fn cancel_request;
+
+  /** whether to set up a particular network connection */
+  icd_policy_nw_connect_fn connect;
+  /** connection restart policy */
+  icd_policy_nw_connection_restart_fn restart;
+  /** informational policy when a network has been connected */
+  icd_policy_nw_connected_fn connected;
+
+  /** whether to take down a particular network connection */
+  icd_policy_nw_disconnect_fn disconnect;
+  /** informational policy when a network has been disconnected */
+  icd_policy_nw_disconnected_fn disconnected;
+
+  /** informational policy for scan start */
+  icd_policy_nw_scan_start_fn scan_start;
+  /** informational policy for scan stop */
+  icd_policy_nw_scan_stop_fn scan_stop;
+
+  /** module destruction function */
+  icd_policy_destruct_fn destruct;
+  /** network priority function */
+  icd_policy_network_priority_fn priority;
+};
+
 
 /**
  * Policy module service module check function.
@@ -272,47 +297,7 @@ typedef gboolean
  * @return  TRUE if there is a suitable service module loaded, FALSE if not
  */
 typedef gboolean
-(*icd_policy_service_module_check_fn)(const gchar *network_type);
-
-/** The policy module API to be filled in by the module */
-struct icd_policy_api {
-
-  /** private data for the module */
-  gpointer private;
-
-  /** request for a new connection */
-  icd_policy_request_new_fn new_request;
-
-  /** cancelling a waiting policy request */
-  icd_policy_request_cancel_fn cancel_request;
-
-  /** whether to set up a particular network connection */
-  icd_policy_nw_connect_fn connect;
-
-  /** connection restart policy */
-  icd_policy_nw_connection_restart_fn restart;
-
-  /** informational policy when a network has been connected */
-  icd_policy_nw_connected_fn connected;
-
-  /** whether to take down a particular network connection */
-  icd_policy_nw_disconnect_fn disconnect;
-
-  /** informational policy when a network has been disconnected */
-  icd_policy_nw_disconnected_fn disconnected;
-
-  /** informational policy for scan start */
-  icd_policy_nw_scan_start_fn scan_start;
-
-  /** informational policy for scan stop */
-  icd_policy_nw_scan_stop_fn scan_stop;
-
-  /** module destruction function */
-  icd_policy_destruct_fn destruct;
-
-  /** network priority function */
-  icd_policy_network_priority_fn priority;
-};
+(*icd_policy_service_module_check_fn) (const gchar *network_type);
 
 /**
  * Add a network connection to try in response to the policy decision. Any
@@ -366,13 +351,14 @@ typedef void
  * @param network_attrs  network attributes, see network_api.h
  * @param network_id     network id, see network_api.h
  */
-typedef void (*icd_policy_request_make_new_fn) (guint policy_attrs,
-                                                gchar *service_type,
-                                                guint service_attrs,
-                                                gchar *service_id,
-                                                gchar *network_type,
-                                                guint network_attrs,
-                                                gchar *network_id);
+typedef void
+(*icd_policy_request_make_new_fn) (guint policy_attrs,
+                                   gchar *service_type,
+                                   guint service_attrs,
+                                   gchar *service_id,
+                                   gchar *network_type,
+                                   guint network_attrs,
+                                   gchar *network_id);
 
 /**
  * Callback function for network scan.
@@ -419,18 +405,20 @@ typedef void
  *                   NULL
  * @param user_data  user data to pass to the callback function
  */
-typedef void (*icd_policy_scan_start_fn) (const gchar *type,
-                                          const guint scope,
-                                          icd_policy_scan_cb_fn cb,
-                                          gpointer user_data);
+typedef void
+(*icd_policy_scan_start_fn) (const gchar *type,
+                             const guint scope,
+                             icd_policy_scan_cb_fn cb,
+                             gpointer user_data);
 
 /**
  * Stop all network scans
  * @param cb         callback function passed to #icd_policy_scan_start_fn
  * @param user_data  user data passed to #icd_policy_scan_start_fn
  */
-typedef void (*icd_policy_scan_stop_fn) (icd_policy_scan_cb_fn cb,
-                                         gpointer user_data);
+typedef void
+(*icd_policy_scan_stop_fn) (icd_policy_scan_cb_fn cb,
+                            gpointer user_data);
 
 /**
  * Close a connected network in icd_policy_nw_(dis)?connect* functions

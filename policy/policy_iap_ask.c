@@ -1,10 +1,8 @@
 /**
 @file policy_iap_ask.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup policy_iap_ask Request 'Select connection' dialog from UI
-
 @ingroup policy
 
  * @{ */
@@ -25,21 +23,15 @@
 
 
 /** Private data for the module */
-struct policy_iap_ask_data
-{
-
+struct policy_iap_ask_data {
   /** backpointer to the module private data */
   gpointer *private;
-
   /** the pending call requesting 'Select connection' dialog from UI */
   DBusPendingCall *pending_call;
-
   /** the request */
   struct icd_policy_request *request;
-
   /** policy callback */
   icd_policy_request_new_cb_fn policy_done_cb;
-
   /** policy callback token */
   gpointer policy_token;
 };

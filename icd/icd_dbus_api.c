@@ -1,10 +1,8 @@
 /**
 @file icd_dbus_api.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_dbus_api ICd2 D-Bus API implementation
-
 @ingroup internal
 
  * @{ */

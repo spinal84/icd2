@@ -1,16 +1,15 @@
 /**
 @file policy_one.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup policy_one One connection only
-
 @ingroup policy
 
  * @{ */
 
 #include "policy_api.h"
 #include "icd_log.h"
+
 
 /**
  * Informational policy called when a network has been successfully connected

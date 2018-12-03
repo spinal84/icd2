@@ -1,10 +1,8 @@
 /**
 @file policy_always_online.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup policy_always_online Always online policy
-
 @ingroup policy
 
  * @{ */
@@ -21,11 +19,13 @@
 #include "icd_dbus.h"
 #include "icd_log.h"
 
+
 #define CHANGE_WHILE_CONNECTED_KEY ICD_GCONF_NETWORK_MAPPING \
                                                 "/change_while_connected"
-#define AUTO_CONNECT_KEY ICD_GCONF_NETWORK_MAPPING "/auto_connect"
-#define SEARCH_INTERVAL_KEY ICD_GCONF_NETWORK_MAPPING "/search_interval"
 
+#define AUTO_CONNECT_KEY ICD_GCONF_NETWORK_MAPPING    "/auto_connect"
+
+#define SEARCH_INTERVAL_KEY ICD_GCONF_NETWORK_MAPPING "/search_interval"
 
 /** how long to wait befor counting IAPs after gconf has changed */
 #define POLICY_ALWAYS_ONLINE_IAP_TIMEOUT   500
@@ -38,54 +38,42 @@
 
 
 /** private data for the always online policy */
-struct always_online_data
-{
-
+struct always_online_data {
   /** number of connections ongoing */
   guint connection_count;
-
   /** timeout callback id for IAP counting */
   guint count_iaps_id;
-
   /** number of IAPs in GConf */
   guint iap_count;
 
   /** timeout value in minutes */
   gint timeout;
-
   /** timer id */
   guint timeout_id;
 
   /** whether connect automatically has a decent value */
   gboolean auto_conn;
-
   /** whether to make a connection attempt even when connected */
   gboolean always_change;
-
   /** whether any always online settings values got changed */
   gboolean always_online_value_changed;
 
   /** GConf notification id for network parameters */
   guint notify_nw_params;
-
   /** GConf notification id for connections */
   guint notify_connections;
 
   /** TRUE if in flight mode, FALSE if in online mode */
   gboolean flight_mode;
-
   /** flight mode pending call */
   DBusPendingCall *pending_flightmode;
-
   /** TRUE if broadcast signals have been connected */
   gboolean flightmode_signals;
 
   /** function to request OSSO_IAP_ANY */
   icd_policy_request_make_new_fn make_request;
-
   /** function to request network priority information */
   icd_policy_network_priority_fn priority;
-
   /** function to check if there is a service module for a given network type */
   icd_policy_service_module_check_fn srv_check;
 

@@ -3,11 +3,9 @@
 
 /**
 @file icd_plugin.h
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_plugin Support functions for loadable plugins
-
 @ingroup internal
 
  * @{ */
@@ -24,22 +22,23 @@
  *
  * @return  TRUE on success, FALSE on failure whereby the module is unloaded
  */
-typedef gboolean (*icd_plugin_load_cb_fn) (const gchar* module_name,
-                                           void *handle,
-                                           gpointer init_function,
-                                           gpointer cb_data);
+typedef gboolean
+(*icd_plugin_load_cb_fn)      (const gchar* module_name,
+                               void *handle,
+                               gpointer init_function,
+                               gpointer cb_data);
 
-gboolean icd_plugin_load (const char *filename,
-                          const char *name,
-                          const char *init_name,
-                          icd_plugin_load_cb_fn cb,
-                          gpointer cb_data);
+gboolean icd_plugin_load      (const char *filename,
+                               const char *name,
+                               const char *init_name,
+                               icd_plugin_load_cb_fn cb,
+                               gpointer cb_data);
 
-gboolean icd_plugin_load_all (const char *plugindir,
-                              const char *prefix,
-                              const char *init_name,
-                              icd_plugin_load_cb_fn cb,
-                              gpointer cb_data);
+gboolean icd_plugin_load_all  (const char *plugindir,
+                               const char *prefix,
+                               const char *init_name,
+                               icd_plugin_load_cb_fn cb,
+                               gpointer cb_data);
 
 gboolean icd_plugin_load_list (const char *plugindir,
                                GSList *plugin_list,

@@ -1,10 +1,8 @@
 /**
 @file icd_pid.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_pid Pid handling
-
 @ingroup internal
 
  * @{ */

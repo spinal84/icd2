@@ -1,10 +1,8 @@
 /**
 @file policy_iap_restart.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup policy_iap_restart IAP restart policy
-
 @ingroup policy
 
  * @{ */
@@ -17,17 +15,16 @@
 
 
 /** min value for restart count */
-#define POLICY_IAP_RESTART_MIN 0
-
+#define POLICY_IAP_RESTART_MIN     0
+/** max value for restart count */
+#define POLICY_IAP_RESTART_MAX     40
 /** default value for restart count */
 #define POLICY_IAP_RESTART_DEFAULT 25
-
-/** max value for restart count */
-#define POLICY_IAP_RESTART_MAX 40
 
 /** gconf location for restart count */
 #define POLICY_IAP_RESTART_COUNT_GCONF_PATH ICD_GCONF_SETTINGS \
                              "/policy/policy_iap_restart/restart_count"
+
 
 /**
  * Read the restart count value from gconf

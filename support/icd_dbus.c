@@ -1,10 +1,8 @@
 /**
 @file icd_dbus.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_dbus D-Bus helper functions
-
 @ingroup support_libraries
 
  * @{ */
@@ -121,8 +119,6 @@ icd_dbus_mcall_send(DBusConnection *connection, DBusMessage *mcall,
 
     return NULL;
   }
-
-
 
   if (!dbus_connection_send_with_reply(connection, mcall, &pending_return,
                                        timeout))
@@ -576,7 +572,6 @@ icd_dbus_cancel_unique_name(DBusPendingCall *pending)
 {
   GSList **unique_list = icd_dbus_get_unique_name_list();
   GSList *l = *unique_list;
-
 
   while(l)
   {

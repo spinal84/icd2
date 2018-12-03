@@ -1,10 +1,8 @@
 /**
 @file icd_script.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_script Network script support
-
 @ingroup internal
 
  * @{ */
@@ -543,7 +541,6 @@ icd_script_add_reserved_env_vars(gchar **env_vars, GSList **script_vars)
 void
 icd_script_add_env_vars(struct icd_iap *iap, gchar **env_vars)
 {
-
   GSList *l;
   gboolean updated = FALSE;
   struct icd_iap_env *env;

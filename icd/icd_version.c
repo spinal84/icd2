@@ -1,6 +1,5 @@
 /**
 @file icd_version.c
-
 @copyright GNU GPLv2 or later
 */
 

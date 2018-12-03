@@ -1,10 +1,8 @@
 /**
 @file icd_osso_ic.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_osso_ic Compatibility functions providing OSSO IC D-Bus API
-
 @ingroup internal
 
  * @{ */

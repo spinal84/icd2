@@ -1,6 +1,5 @@
 /**
 @addtogroup icd_status_changed ICD_STATUS_CHANGED_SIG signal sending
-
 @ingroup internal
 
  * @{ */

@@ -1,10 +1,8 @@
 /**
 @file icd_name_owner.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_name_owner D-Bus NameOwnerChanged message handling
-
 @ingroup internal
 
  * @{ */

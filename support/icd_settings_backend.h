@@ -5,7 +5,6 @@
 
 /** settings data; for internal use only */
 struct icd_settings {
-
   /** list of settings handles hashed by network id */
   GHashTable *network_id;
 };

@@ -1,10 +1,8 @@
 /**
 @file icd_policy_api.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_policy_api ICd policy API implementation
-
 @ingroup internal
 
  * @{ */
@@ -264,7 +262,6 @@ icd_policy_api_iap_disconnect(struct icd_policy_request *connection,
   return icd_policy_api_run(icd_policy_api_iap_disconnect_iter, connection,
                             GINT_TO_POINTER(refcount));
 }
-
 
 /**
  * Create the list of existing requests, new_request is omitted from the list

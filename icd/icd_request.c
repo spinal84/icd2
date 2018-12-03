@@ -1,10 +1,8 @@
 /**
 @file icd_request.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_request Connection request
-
 @ingroup internal
 
  * @{ */
@@ -647,7 +645,6 @@ icd_request_add_iap(struct icd_request *request, gchar *service_type,
   }
 
   icd_iap_id_create(iap, 0);
-
 
   ILOG_DEBUG("adding IAP %s/%0x/%s,%s/%0x/%s to request %p",
              iap->connection.service_type,

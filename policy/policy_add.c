@@ -1,10 +1,8 @@
 /**
 @file policy_add.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup policy_add New IAP creation
-
 @ingroup policy
 
  * @{ */

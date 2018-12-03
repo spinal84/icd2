@@ -1,10 +1,8 @@
 /**
 @file icd_srv_provider.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_srv_provider Service provider API implementation
-
 @ingroup internal
 
  * @{ */
@@ -197,7 +195,6 @@ icd_srv_provider_disconnect_cb(enum icd_srv_status status,
                                gpointer disconnect_cb_token)
 {
   struct icd_iap *iap = (struct icd_iap *)disconnect_cb_token;
-
 
   if (iap)
   {
@@ -947,7 +944,6 @@ static void
 icd_srv_provider_connect_cb(enum icd_srv_status status, const gchar *err_str,
                             gpointer connect_cb_token)
 {
-
   struct icd_iap *iap = (struct icd_iap *)connect_cb_token;
 
   if (iap)

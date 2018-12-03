@@ -1,10 +1,8 @@
 /**
 @file policy_merge.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup policy_merge Merge a new request with an already existing one
-
 @ingroup policy
 
  * @{ */
@@ -15,6 +13,7 @@
 
 #include "policy_api.h"
 #include "icd_log.h"
+
 
 /**
  * Helper function for comparing two strings where a NULL string is equal to

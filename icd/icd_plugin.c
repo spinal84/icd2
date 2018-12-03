@@ -1,10 +1,8 @@
 /**
 @file icd_plugin.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_plugin Support functions for loadable plugins
-
 @ingroup internal
 
  * @{ */

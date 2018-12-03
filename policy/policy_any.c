@@ -1,10 +1,8 @@
 /**
 @file policy_any.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup policy_any Any connection policy
-
 @ingroup policy
 
  * @{ */
@@ -18,87 +16,66 @@
 #include "policy_api.h"
 #include "icd_log.h"
 
+
 #define CHANGE_WHILE_CONNECTED_KEY ICD_GCONF_NETWORK_MAPPING \
                                          "/change_while_connected"
+
 #define AUTO_CONNECT_KEY ICD_GCONF_NETWORK_MAPPING "/auto_connect"
 
 
 /** data for the any policy */
-struct policy_any_data
-{
-
+struct policy_any_data {
   /** function to add a new network */
   icd_policy_nw_add_fn add_network;
-
   /** merge with an existing connection */
   icd_policy_request_merge_fn merge;
 
   /** function to start scanning */
   icd_policy_scan_start_fn scan_start;
-
   /** function to stop scanning */
   icd_policy_scan_stop_fn scan_stop;
 
   /** the request that we scan for */
   struct icd_policy_request *request;
-
   /** list of ongoing scans containing policy_scan_data structures */
   GSList *ongoing_scans;
-
-  /** List of network types to scan */
+  /** list of network types to scan */
   GSList *scan_types_list;
-
   /** minimum network priority desired */
   gint min_prio;
-
   /** whether any iaps were added to the request */
   gboolean iaps_added;
-
   /** list of found networks */
   GSList *found_networks;
-
   /** function to check if there is a service module for a given network type */
   icd_policy_service_module_check_fn srv_check;
 };
 
-
 /** data for keeping track of the request we're scanning for */
-struct policy_scan_data
-{
-
+struct policy_scan_data {
   /** the callback for this request */
   icd_policy_request_new_cb_fn policy_done_cb;
-
   /** associated policy token */
   gpointer policy_token;
-
   /** backpointer to the module data */
   struct policy_any_data *any_data;
 };
 
-
 /** data about a found network */
-struct policy_any_network
-{
-
+struct policy_any_network {
   /** service type */
   gchar *service_type;
-
   /** service attributes */
   guint service_attrs;
-
   /** service id */
   gchar *service_id;
 
   /** network type */
   gchar *network_type;
-
   /** network attributes */
   guint network_attrs;
-
   /** network id */
   gchar *network_id;
-
   /** network priority */
   gint network_priority;
 

@@ -253,6 +253,7 @@ typedef void (*icd_srv_child_exit_fn) (const pid_t pid,
  */
 typedef void (*icd_srv_destruct_fn) (gpointer *private);
 
+
 /** icd_srv_api defines the service provider functions implemented by the
  * module */
 struct icd_srv_api {

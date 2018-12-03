@@ -1,6 +1,5 @@
 /**
 @file icd_type_modules.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup type_modules Network type to network module mapping

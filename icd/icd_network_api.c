@@ -1,10 +1,8 @@
 /**
 @file icd_network_api.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_network_api ICd network API handling
-
 @ingroup internal
 
  * @{ */

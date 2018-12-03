@@ -127,11 +127,9 @@
 
 /**
 @file icd_exec.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_exec ICd execution
-
 @ingroup internal
 
  * @{ */

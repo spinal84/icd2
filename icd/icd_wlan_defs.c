@@ -1,10 +1,8 @@
 /**
 @file icd_wlan_defs.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_wlan_defs Defines for WLAN attribute bits
-
 @ingroup internal
 
  * @{ */

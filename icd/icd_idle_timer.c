@@ -1,10 +1,8 @@
 /**
 @file icd_idle_timer.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_idle_timer iptables idle timer handling
-
 @ingroup internal
 
  * @{ */

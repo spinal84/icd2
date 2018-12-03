@@ -1,10 +1,8 @@
 /**
 @file policy_nw_disconnect.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup policy_nw_disconnect Network disconnect reference count
-
 @ingroup policy
 
  * @{ */

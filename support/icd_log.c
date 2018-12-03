@@ -1,10 +1,8 @@
 /**
 @file icd_log.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_log Logging functions
-
 @ingroup support_libraries
 
  * @{ */

@@ -1,10 +1,8 @@
 /**
 @file policy_change.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup policy_change Change to another connection
-
 @ingroup policy
 
  * @{ */
@@ -28,27 +26,19 @@
 
 
 /** data for the policy change module */
-struct policy_change_data
-{
-
+struct policy_change_data {
   /** pending call to UI */
   DBusPendingCall *change_call;
-
   /** the iap to change from */
   gchar *change_from;
-
   /** the iap to change to */
   gchar *change_to;
-
   /** whether the change has been performed */
   gboolean is_changing;
-
   /** new request callback */
   icd_policy_request_new_cb_fn done_cb;
-
   /** the request to accept or reject */
   struct icd_policy_request *new_request;
-
   /** new request callback token */
   gpointer done_token;
 };

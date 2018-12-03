@@ -3,7 +3,6 @@
 
 /**
 @addtogroup icd_log Logging functions
-
 @ingroup support_libraries
 
  * @{ */

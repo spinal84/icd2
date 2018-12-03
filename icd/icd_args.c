@@ -1,10 +1,8 @@
 /**
 @file icd_args.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_args Command line argument parsing
-
 @ingroup internal
 
  * @{ */

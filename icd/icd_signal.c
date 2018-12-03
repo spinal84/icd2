@@ -1,10 +1,8 @@
 /**
 @file icd_signal.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_signal Signal handling integration with glib main loop
-
 @ingroup internal
 
  * @{ */

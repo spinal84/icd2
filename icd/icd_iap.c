@@ -1,10 +1,8 @@
 /**
 @file icd_iap.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_iap IAP connection abstraction
-
 @ingroup internal
 
  * @{ */

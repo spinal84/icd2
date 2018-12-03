@@ -3,11 +3,9 @@
 
 /**
 @file icd_exec.h
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_exec ICd execution
-
 @ingroup internal
 
  * @{ */

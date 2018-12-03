@@ -1,10 +1,8 @@
 /**
 @file icd_scan.c
-
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_scan Network scan and scan result handling
-
 @ingroup internal
 
  * @{ */
@@ -424,7 +422,6 @@ icd_scan_expire_network(gpointer key, gpointer value, gpointer user_data)
   ILOG_DEBUG("network id '%s' all entries expired", network_id);
   return TRUE;
 }
-
 
 /**
  * Hash table callback for removing an entry, this version is only called

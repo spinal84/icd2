@@ -4,11 +4,11 @@
 /**
 @file icd_wlan_defs.h
 
+@todo Remove this file when wlan provides a .h file with the needed defines
+
 @copyright GNU GPLv2 or later
 
 @addtogroup icd_wlan_defs Defines for WLAN attribute bits
-
-@todo Remove this file when wlan provides a .h file with the needed defines
 
 @ingroup internal
 

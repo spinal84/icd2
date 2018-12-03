@@ -15,9 +15,9 @@ networks. The icd_scan_cache_list structure is used because the pointer to
 the singly linked list must be updated whenever a network is removed.
 <pre>
  +---+
- | n |   +GHashTable(network_idX)-+
- | w |-->|scan_cache_table        |
- |   |   +------------------------+
+ | n |   +-GHashTable(network_idX)-+
+ | w |-->|    scan_cache_table     |
+ |   |   +-------------------------+
  | m |                     |  |  +->icd_scan_cache_list
  | o |                     |  |       +->GSlist for network_idN
  | d |                     |  |
@@ -28,7 +28,7 @@ the singly linked list must be updated whenever a network is removed.
                            |
                            +->icd_scan_cache_list
                                 +->GSList for network_idN
- </pre>
+</pre> 
 
 @ingroup internal
 

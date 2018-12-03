@@ -44,6 +44,10 @@ gboolean icd_gconf_rename (const gchar *settings_name, const gchar *name);
 gboolean icd_gconf_add_notify(void);
 void icd_gconf_del_notify(void);
 
+/**
+ * Check whether the scanning should be initiated when search dialog opens.
+ * @return TRUE if yes, FALSE if not
+ */
 static inline gboolean icd_gconf_agressive_scanning()
 {
         return icd_gconf_get_iap_bool(NULL,
